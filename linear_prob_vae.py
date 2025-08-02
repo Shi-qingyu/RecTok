@@ -3,12 +3,11 @@ import sys
 import logging
 import os
 import time
-import tqdm
+
 import torch
 from torch import nn
+from diffusers import AutoencoderKL
 
-from utils.builders import create_reconstruction_model
-from utils.builders import create_train_dataloader
 import torchvision.transforms as transforms
 from utils.loader import ListDataset, center_crop_arr
 import utils.distributed as dist
@@ -18,23 +17,47 @@ from utils.logger import MetricLogger, SmoothedValue
 logger = logging.getLogger("Linear Probing")
 
 
+def create_vae_backbone(device):
+    """Create VAE backbone from Stable Diffusion"""
+    vae = AutoencoderKL.from_pretrained(
+        "runwayml/stable-diffusion-v1-5",
+        subfolder="vae",
+        torch_dtype=torch.float32
+    )
+    vae.eval()
+    vae.requires_grad_(False)
+    return vae.to(device)
+
+
 class LinearProbing(nn.Module):
-    def __init__(self, model: nn.Module, num_classes: int):
+    def __init__(self, vae: AutoencoderKL, num_classes: int):
         super().__init__()
-        self.model = model
+        self.vae = vae
         self.num_classes = num_classes
 
-        in_channels = model.encoder.token_channels // 2
-        self.linear = nn.Linear(in_channels, num_classes)
+        # VAE latent dimension is typically 4 (default channels) for SD VAE
+        latent_channels = self.vae.config.latent_channels  # Usually 4
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.linear = nn.Linear(latent_channels, num_classes)
         self.freeze_model()
     
     def freeze_model(self):
-        self.model.eval()
-        self.model.requires_grad_(False)
+        self.vae.eval()
+        self.vae.requires_grad_(False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        z = self.model.tokenize(x, sampling=False)  # [B, C, H, W]
-        z = z.mean(dim=(-2, -1))
+        # Scale input from [-1, 1] to [0, 1] for VAE
+        # x = (x + 1) / 2.0
+        
+        # Get VAE encoding
+        with torch.no_grad():
+            z = self.vae.encode(x).latent_dist.sample()  # [B, 4, H/8, W/8]
+        
+        # Global average pooling
+        z = self.avgpool(z)  # [B, 4, 1, 1]
+        z = z.reshape(z.size(0), -1)  # [B, 4]
+        
+        # Classification head
         logits = self.linear(z)
         return logits
 
@@ -116,7 +139,7 @@ def evaluate(model, data_loader, device):
     total_samples = 0
     
     with torch.no_grad():
-        for batch in tqdm.tqdm(data_loader, disable=dist.get_global_rank() != 0):
+        for batch in data_loader:
             img = batch["img"].to(device, non_blocking=True)
             labels = batch["label"].to(device, non_blocking=True)
             
@@ -139,22 +162,65 @@ def evaluate(model, data_loader, device):
     return accuracy
 
 
+def create_train_dataloader(args):
+    """Create training dataloader"""
+    transform_train = transforms.Compose([
+        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    ])
+    
+    dataset_train = ListDataset(
+        args.data_path,
+        data_list="data/train.txt",
+        transform=transform_train,
+        loader_name="img_loader",
+        return_label=True,
+        should_flip=True,
+    )
+    
+    sampler_train = torch.utils.data.DistributedSampler(
+        dataset_train,
+        num_replicas=dist.get_world_size(),
+        rank=dist.get_global_rank(),
+        shuffle=True,
+    )
+    
+    logger.info(f"Train dataset size: {len(dataset_train)}")
+    
+    data_loader_train = torch.utils.data.DataLoader(
+        dataset_train,
+        sampler=sampler_train,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=True,
+    )
+    return data_loader_train
+
+
 def main(args: argparse.Namespace) -> int:
     is_main_process = setup(args)
     
-    # First create model and move to device
-    device = torch.device(f"cuda:{dist.get_global_rank()}")
-    model = create_reconstruction_model(args)[0]
-    print(f"Loading checkpoint from {args.checkpoint_path}")
-    ckpt = torch.load(args.checkpoint_path, map_location=device)
-    model.load_state_dict(ckpt["model"])
-    print("Checkpoint loaded")
-    linear_prob = LinearProbing(model, args.num_classes)
-    linear_prob = linear_prob.to(device)
+    # Initialize wandb if enabled
+    if is_main_process and args.enable_wandb:
+        import wandb
+        wandb.init(
+            project=args.project,
+            entity=args.entity,
+            name=args.exp_name,
+            config=args.__dict__,
+            settings=wandb.Settings(init_timeout=120)
+        )
     
-    # Then create dataloaders
+    # Create dataloaders
     data_loader_train = create_train_dataloader(args)
     data_loader_val = create_val_dataloader_with_labels(args)
+
+    # Create VAE backbone and linear probe
+    device = torch.device(f"cuda:{dist.get_global_rank()}")
+    vae = create_vae_backbone(device)
+    linear_prob = LinearProbing(vae, args.num_classes)
     
     # Move model to appropriate device
     device = torch.device(f"cuda:{dist.get_global_rank()}")

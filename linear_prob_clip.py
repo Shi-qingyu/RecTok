@@ -3,12 +3,11 @@ import sys
 import logging
 import os
 import time
-import tqdm
+import json
+
 import torch
 from torch import nn
 
-from utils.builders import create_reconstruction_model
-from utils.builders import create_train_dataloader
 import torchvision.transforms as transforms
 from utils.loader import ListDataset, center_crop_arr
 import utils.distributed as dist
@@ -18,25 +17,49 @@ from utils.logger import MetricLogger, SmoothedValue
 logger = logging.getLogger("Linear Probing")
 
 
-class LinearProbing(nn.Module):
-    def __init__(self, model: nn.Module, num_classes: int):
-        super().__init__()
-        self.model = model
-        self.num_classes = num_classes
+from transformers import CLIPProcessor, CLIPVisionModel
 
-        in_channels = model.encoder.token_channels // 2
-        self.linear = nn.Linear(in_channels, num_classes)
-        self.freeze_model()
+
+def create_clip_backbone(device):
+    """Create CLIP vision backbone using transformers library"""
+    model_name = "openai/clip-vit-base-patch16"
     
-    def freeze_model(self):
-        self.model.eval()
-        self.model.requires_grad_(False)
+    # Load processor and model
+    processor = CLIPProcessor.from_pretrained(model_name)
+    clip_model = CLIPVisionModel.from_pretrained(model_name)
+    
+    # Freeze the model
+    clip_model.eval()
+    clip_model.requires_grad_(False)
+    
+    return clip_model.to(device), processor
+
+
+class LinearProbing(nn.Module):
+    def __init__(self, clip_model, num_classes: int):
+        super().__init__()
+        self.model = clip_model
+        token_channels = clip_model.config.hidden_size  # 768 for CLIP-base
+        self.linear = nn.Linear(token_channels, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        z = self.model.tokenize(x, sampling=False)  # [B, C, H, W]
-        z = z.mean(dim=(-2, -1))
+        with torch.no_grad():
+            # CLIP vision model expects pixel values
+            outputs = self.model(pixel_values=x)
+            # Use the pooler output (global image representation)
+            z = outputs.pooler_output  # [B, hidden_size]
         logits = self.linear(z)
         return logits
+
+
+def create_clip_transform(processor):
+    """Create transform using CLIP processor"""
+    def clip_transform(image):
+        # Convert PIL image to tensor and apply CLIP preprocessing
+        inputs = processor(images=image, return_tensors="pt")
+        return inputs['pixel_values'].squeeze(0)  # Remove batch dimension
+    
+    return clip_transform
 
 
 def setup(args: argparse.Namespace):
@@ -72,13 +95,16 @@ def setup(args: argparse.Namespace):
     return global_rank == 0
 
 
-def create_val_dataloader_with_labels(args):
+def create_val_dataloader_with_labels(args, custom_transform=None):
     """Create validation dataloader that returns labels for classification"""
-    transform_val = transforms.Compose([
-        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.img_size)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-    ])
+    if custom_transform is None:
+        transform_val = transforms.Compose([
+            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.img_size)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        ])
+    else:
+        transform_val = custom_transform
     
     dataset_val = ListDataset(
         args.data_path.replace("train", "val"),
@@ -109,6 +135,53 @@ def create_val_dataloader_with_labels(args):
     return data_loader_val
 
 
+def create_train_dataloader(
+    args, should_flip=True, 
+    batch_size=-1, 
+    return_path=False, 
+    drop_last=True, 
+    custom_transform=None
+):
+    if custom_transform is None:
+        transform_train = transforms.Compose(
+            [
+                transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.img_size)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            ]
+        )
+    else:
+        transform_train = custom_transform
+
+    input_transform = transform_train if not args.use_cached_tokens else None
+    dataset_train = ListDataset(
+        args.data_path,
+        data_list="data/train.txt",
+        transform=input_transform,
+        loader_name="img_loader" if not args.use_cached_tokens else "npz_loader",
+        return_label=True,
+        return_path=return_path,
+        should_flip=should_flip,
+    )
+    logger.info(f"Train dataset size: {len(dataset_train)}")
+
+    sampler_train = torch.utils.data.DistributedSampler(
+        dataset_train,
+        num_replicas=dist.get_world_size(),
+        rank=dist.get_global_rank(),
+        shuffle=True,
+    )
+    data_loader_train = torch.utils.data.DataLoader(
+        dataset_train,
+        sampler=sampler_train,
+        batch_size=args.batch_size if batch_size < 0 else batch_size,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=drop_last,
+    )
+    return data_loader_train
+
+
 def evaluate(model, data_loader, device):
     """Evaluate the model on validation set"""
     model.eval()
@@ -116,7 +189,7 @@ def evaluate(model, data_loader, device):
     total_samples = 0
     
     with torch.no_grad():
-        for batch in tqdm.tqdm(data_loader, disable=dist.get_global_rank() != 0):
+        for batch in data_loader:
             img = batch["img"].to(device, non_blocking=True)
             labels = batch["label"].to(device, non_blocking=True)
             
@@ -141,20 +214,25 @@ def evaluate(model, data_loader, device):
 
 def main(args: argparse.Namespace) -> int:
     is_main_process = setup(args)
-    
-    # First create model and move to device
+    # Initialize wandb if enabled
+    if is_main_process and hasattr(args, 'use_wandb') and args.use_wandb:
+        import wandb
+        wandb.init(
+            project=args.project,
+            entity=args.entity,
+            name=args.exp_name,
+            config=args.__dict__,
+            settings=wandb.Settings(init_timeout=120)
+        )
+
     device = torch.device(f"cuda:{dist.get_global_rank()}")
-    model = create_reconstruction_model(args)[0]
-    print(f"Loading checkpoint from {args.checkpoint_path}")
-    ckpt = torch.load(args.checkpoint_path, map_location=device)
-    model.load_state_dict(ckpt["model"])
-    print("Checkpoint loaded")
-    linear_prob = LinearProbing(model, args.num_classes)
-    linear_prob = linear_prob.to(device)
+    clip_model, processor = create_clip_backbone(device)
+    linear_prob = LinearProbing(clip_model, args.num_classes).to(device)
     
-    # Then create dataloaders
-    data_loader_train = create_train_dataloader(args)
-    data_loader_val = create_val_dataloader_with_labels(args)
+    clip_transform = create_clip_transform(processor)
+    data_loader_train = create_train_dataloader(args, custom_transform=clip_transform)
+    data_loader_val = create_val_dataloader_with_labels(args, custom_transform=clip_transform)
+
     
     # Move model to appropriate device
     device = torch.device(f"cuda:{dist.get_global_rank()}")
@@ -183,6 +261,15 @@ def main(args: argparse.Namespace) -> int:
     metric_logger.add_meter('loss', SmoothedValue(window_size=50, fmt='{value:.4f}'))
     metric_logger.add_meter('acc', SmoothedValue(window_size=50, fmt='{value:.4f}'))
 
+    # Track metrics for plotting
+    train_metrics = {
+        'epochs': [],
+        'train_loss': [],
+        'train_acc': [],
+        'val_acc': [],
+        'learning_rate': []
+    }
+
     for epoch in range(args.epochs):
         # Set epoch for distributed sampler
         if hasattr(data_loader_train.sampler, 'set_epoch'):
@@ -190,19 +277,26 @@ def main(args: argparse.Namespace) -> int:
             
         linear_prob.train()
         start_time = time.time()
-
-        # Validation
-        if epoch % args.eval_freq == 0:
-            val_acc = evaluate(linear_prob, data_loader_val, device)
-            if is_main_process:
-                logger.info(f"Epoch {epoch} - Validation accuracy: {val_acc:.4f}")
-
+        
         for step, batch in enumerate(data_loader_train):
             img = batch["img"].to(device, non_blocking=True)
             labels = batch["label"].to(device, non_blocking=True)
 
+            # Debug: print shapes and ranges on first step
+            if step == 0 and epoch == 0 and is_main_process:
+                logger.info(f"Input image shape: {img.shape}")
+                logger.info(f"Input image range: [{img.min().item():.3f}, {img.max().item():.3f}]")
+                logger.info(f"Labels shape: {labels.shape}")
+                logger.info(f"Labels range: [{labels.min().item()}, {labels.max().item()}]")
+
             logits = linear_prob(img)   # [b, num_classes]
             loss = loss_fn(logits, labels)
+            
+            # Debug: print logits stats on first step
+            if step == 0 and epoch == 0 and is_main_process:
+                logger.info(f"Logits shape: {logits.shape}")
+                logger.info(f"Logits mean: {logits.mean().item():.3f}, std: {logits.std().item():.3f}")
+                logger.info(f"Initial loss: {loss.item():.4f}")
             
             # Calculate accuracy
             preds = torch.argmax(logits, dim=-1)
@@ -228,6 +322,51 @@ def main(args: argparse.Namespace) -> int:
                     f"Loss: {loss_reduced:.4f} Acc: {acc_reduced:.4f} "
                     f"LR: {optimizer.param_groups[0]['lr']:.6f}"
                 )
+                
+                # Log to wandb
+                if hasattr(args, 'use_wandb') and args.use_wandb:
+                    wandb.log({
+                        "train/loss": loss_reduced,
+                        "train/accuracy": acc_reduced,
+                        "train/learning_rate": optimizer.param_groups[0]["lr"],
+                        "epoch": epoch,
+                        "step": step + epoch * len(data_loader_train)
+                    })
+        
+        # Validation and metric tracking
+        val_acc = 0.0
+        if epoch % args.eval_freq == 0:
+            val_acc = evaluate(linear_prob, data_loader_val, device)
+            if is_main_process:
+                logger.info(f"Epoch {epoch} - Validation accuracy: {val_acc:.4f}")
+                if hasattr(args, 'use_wandb') and args.use_wandb:
+                    wandb.log({
+                        "val/accuracy": val_acc,
+                        "epoch": epoch
+                    })
+        
+        # Save metrics for plotting
+        if is_main_process:
+            train_metrics['epochs'].append(epoch)
+            train_metrics['train_loss'].append(metric_logger.meters['loss'].global_avg)
+            train_metrics['train_acc'].append(metric_logger.meters['acc'].global_avg)
+            train_metrics['val_acc'].append(val_acc)
+            train_metrics['learning_rate'].append(optimizer.param_groups[0]['lr'])
+            
+            # Save metrics to file (for real-time plotting)
+            metrics_file = os.path.join(args.log_dir, 'training_metrics.json')
+            with open(metrics_file, 'w') as f:
+                json.dump(train_metrics, f, indent=2)
+            
+            # Also save a backup with timestamp
+            if epoch % 10 == 0:  # Save backup every 10 epochs
+                backup_file = os.path.join(args.log_dir, f'training_metrics_epoch_{epoch}.json')
+                with open(backup_file, 'w') as f:
+                    json.dump(train_metrics, f, indent=2)
+    
+    # Cleanup wandb
+    if is_main_process and hasattr(args, 'use_wandb') and args.use_wandb:
+        wandb.finish()
     
     return 0
 
@@ -237,12 +376,12 @@ def get_args_parser():
 
     # basic training parameters
     parser.add_argument("--epochs", default=200, type=int)
-    parser.add_argument("--batch_size", default=64, type=int, help="Batch size per GPU for training")
+    parser.add_argument("--batch_size", default=256, type=int, help="Batch size per GPU for training")
 
     # model parameters
     parser.add_argument("--model", default="detok_BB", type=str)
     parser.add_argument("--token_channels", default=16, type=int)
-    parser.add_argument("--img_size", default=256, type=int)
+    parser.add_argument("--img_size", default=224, type=int)
     parser.add_argument("--patch_size", default=16, type=int)
 
     parser.add_argument("--mask_ratio", default=0.0, type=float)
@@ -267,7 +406,7 @@ def get_args_parser():
 
     # optimization parameters
     parser.add_argument("--lr", type=float, default=None)
-    parser.add_argument("--blr", type=float, default=1e-4)
+    parser.add_argument("--blr", type=float, default=3e-3)
     parser.add_argument("--min_lr", type=float, default=0.0)
     parser.add_argument("--lr_sched", type=str, default="cosine", choices=["constant", "cosine"])
     parser.add_argument("--warmup_rate", type=float, default=0.25)
@@ -289,13 +428,13 @@ def get_args_parser():
     parser.set_defaults(pin_mem=True)
 
     # system parameters
-    parser.add_argument("--seed", default=0, type=int)
+    parser.add_argument("--seed", default=1, type=int)
 
     # wandb parameters
-    parser.add_argument("--project", default="lDeTok", type=str)
-    parser.add_argument("--entity", default="YOUR_WANDB_ENTITY", type=str)
+    parser.add_argument("--project", default="linear_probing", type=str)
+    parser.add_argument("--entity", default="220bd3c9b2335d6ac97c90d30fb9b6880f0b7008", type=str)
     parser.add_argument("--exp_name", default=None, type=str)
-    parser.add_argument("--enable_wandb", action="store_true")
+    parser.add_argument("--use_wandb", action="store_true")
 
     return parser
 
