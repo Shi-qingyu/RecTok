@@ -12,7 +12,7 @@ if [ -z "$1" ]; then
 fi
 
 checkpoint_path="$1"
-num_gpus="${2:-4}"  # Default to 4 GPUs if not specified
+num_gpus="${2:-8}"  # Default to 4 GPUs if not specified
 
 # Get current timestamp for unique experiment name
 timestamp=$(date +%Y%m%d_%H%M)
