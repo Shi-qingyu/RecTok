@@ -7,32 +7,17 @@ import json
 
 import torch
 from torch import nn
-
 import torchvision.transforms as transforms
+
 from utils.loader import ListDataset, center_crop_arr
 import utils.distributed as dist
 import utils.misc as misc
 from utils.logger import MetricLogger, SmoothedValue
 
-logger = logging.getLogger("Linear Probing")
-
 
 from transformers import CLIPProcessor, CLIPVisionModel
 
-
-def create_clip_backbone(device):
-    """Create CLIP vision backbone using transformers library"""
-    model_name = "openai/clip-vit-base-patch16"
-    
-    # Load processor and model
-    processor = CLIPProcessor.from_pretrained(model_name)
-    clip_model = CLIPVisionModel.from_pretrained(model_name)
-    
-    # Freeze the model
-    clip_model.eval()
-    clip_model.requires_grad_(False)
-    
-    return clip_model.to(device), processor
+logger = logging.getLogger("Linear Probing")
 
 
 class LinearProbing(nn.Module):
@@ -50,6 +35,21 @@ class LinearProbing(nn.Module):
             z = outputs.pooler_output  # [B, hidden_size]
         logits = self.linear(z)
         return logits
+
+
+def create_clip_backbone(device):
+    """Create CLIP vision backbone using transformers library"""
+    model_name = "openai/clip-vit-base-patch16"
+    
+    # Load processor and model
+    processor = CLIPProcessor.from_pretrained(model_name)
+    clip_model = CLIPVisionModel.from_pretrained(model_name)
+    
+    # Freeze the model
+    clip_model.eval()
+    clip_model.requires_grad_(False)
+    
+    return clip_model.to(device), processor
 
 
 def create_clip_transform(processor):
@@ -95,7 +95,7 @@ def setup(args: argparse.Namespace):
     return global_rank == 0
 
 
-def create_val_dataloader_with_labels(args, custom_transform=None):
+def create_val_dataloader(args, custom_transform=None):
     """Create validation dataloader that returns labels for classification"""
     if custom_transform is None:
         transform_val = transforms.Compose([
@@ -136,7 +136,8 @@ def create_val_dataloader_with_labels(args, custom_transform=None):
 
 
 def create_train_dataloader(
-    args, should_flip=True, 
+    args, 
+    should_flip=True, 
     batch_size=-1, 
     return_path=False, 
     drop_last=True, 
@@ -231,7 +232,7 @@ def main(args: argparse.Namespace) -> int:
     
     clip_transform = create_clip_transform(processor)
     data_loader_train = create_train_dataloader(args, custom_transform=clip_transform)
-    data_loader_val = create_val_dataloader_with_labels(args, custom_transform=clip_transform)
+    data_loader_val = create_val_dataloader(args, custom_transform=clip_transform)
 
     
     # Move model to appropriate device
@@ -276,8 +277,6 @@ def main(args: argparse.Namespace) -> int:
             data_loader_train.sampler.set_epoch(epoch)
             
         linear_prob.train()
-        start_time = time.time()
-        
         for step, batch in enumerate(data_loader_train):
             img = batch["img"].to(device, non_blocking=True)
             labels = batch["label"].to(device, non_blocking=True)
@@ -344,26 +343,7 @@ def main(args: argparse.Namespace) -> int:
                         "val/accuracy": val_acc,
                         "epoch": epoch
                     })
-        
-        # Save metrics for plotting
-        if is_main_process:
-            train_metrics['epochs'].append(epoch)
-            train_metrics['train_loss'].append(metric_logger.meters['loss'].global_avg)
-            train_metrics['train_acc'].append(metric_logger.meters['acc'].global_avg)
-            train_metrics['val_acc'].append(val_acc)
-            train_metrics['learning_rate'].append(optimizer.param_groups[0]['lr'])
-            
-            # Save metrics to file (for real-time plotting)
-            metrics_file = os.path.join(args.log_dir, 'training_metrics.json')
-            with open(metrics_file, 'w') as f:
-                json.dump(train_metrics, f, indent=2)
-            
-            # Also save a backup with timestamp
-            if epoch % 10 == 0:  # Save backup every 10 epochs
-                backup_file = os.path.join(args.log_dir, f'training_metrics_epoch_{epoch}.json')
-                with open(backup_file, 'w') as f:
-                    json.dump(train_metrics, f, indent=2)
-    
+
     # Cleanup wandb
     if is_main_process and hasattr(args, 'use_wandb') and args.use_wandb:
         wandb.finish()

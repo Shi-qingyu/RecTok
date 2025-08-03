@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Training configuration
-batch_size=256  # global batch size = batch_size x num_nodes x 8 = 1024
+batch_size=512  # global batch size = batch_size x num_nodes x 8 = 1024
 epochs=50
 lr=3e-3
 eval_freq=5
@@ -18,7 +18,7 @@ echo "Epochs: $epochs"
 
 # Run training with torchrun for distributed training
 export WANDB_MODE=offline
-torchrun --nproc_per_node=4 --nnodes=1 --node_rank=0 --master_addr=localhost --master_port=29501 \
+torchrun --nproc_per_node=8 --nnodes=1 --node_rank=0 --master_addr=localhost --master_port=29501 \
     linear_prob_clip.py \
     --batch_size $batch_size \
     --lr $lr \

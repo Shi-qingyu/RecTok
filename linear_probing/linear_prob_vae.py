@@ -17,18 +17,6 @@ from utils.logger import MetricLogger, SmoothedValue
 logger = logging.getLogger("Linear Probing")
 
 
-def create_vae_backbone(device):
-    """Create VAE backbone from Stable Diffusion"""
-    vae = AutoencoderKL.from_pretrained(
-        "runwayml/stable-diffusion-v1-5",
-        subfolder="vae",
-        torch_dtype=torch.float32
-    )
-    vae.eval()
-    vae.requires_grad_(False)
-    return vae.to(device)
-
-
 class LinearProbing(nn.Module):
     def __init__(self, vae: AutoencoderKL, num_classes: int):
         super().__init__()
@@ -60,6 +48,18 @@ class LinearProbing(nn.Module):
         # Classification head
         logits = self.linear(z)
         return logits
+
+
+def create_vae_backbone(device):
+    """Create VAE backbone from Stable Diffusion"""
+    vae = AutoencoderKL.from_pretrained(
+        "runwayml/stable-diffusion-v1-5",
+        subfolder="vae",
+        torch_dtype=torch.float32
+    )
+    vae.eval()
+    vae.requires_grad_(False)
+    return vae.to(device)
 
 
 def setup(args: argparse.Namespace):
@@ -95,7 +95,37 @@ def setup(args: argparse.Namespace):
     return global_rank == 0
 
 
-def create_val_dataloader_with_labels(args):
+def evaluate(model, data_loader, device):
+    """Evaluate the model on validation set"""
+    model.eval()
+    total_correct = 0
+    total_samples = 0
+    
+    with torch.no_grad():
+        for batch in data_loader:
+            img = batch["img"].to(device, non_blocking=True)
+            labels = batch["label"].to(device, non_blocking=True)
+            
+            logits = model(img)
+            preds = torch.argmax(logits, dim=-1)
+            correct = (preds == labels).sum().item()
+            
+            total_correct += correct
+            total_samples += labels.size(0)
+    
+    # Aggregate across all processes
+    total_correct_tensor = torch.tensor(total_correct, device=device)
+    total_samples_tensor = torch.tensor(total_samples, device=device)
+    
+    if dist.get_world_size() > 1:
+        torch.distributed.all_reduce(total_correct_tensor)
+        torch.distributed.all_reduce(total_samples_tensor)
+    
+    accuracy = total_correct_tensor.item() / total_samples_tensor.item()
+    return accuracy
+
+
+def create_val_dataloader(args):
     """Create validation dataloader that returns labels for classification"""
     transform_val = transforms.Compose([
         transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.img_size)),
@@ -130,36 +160,6 @@ def create_val_dataloader_with_labels(args):
         drop_last=False,
     )
     return data_loader_val
-
-
-def evaluate(model, data_loader, device):
-    """Evaluate the model on validation set"""
-    model.eval()
-    total_correct = 0
-    total_samples = 0
-    
-    with torch.no_grad():
-        for batch in data_loader:
-            img = batch["img"].to(device, non_blocking=True)
-            labels = batch["label"].to(device, non_blocking=True)
-            
-            logits = model(img)
-            preds = torch.argmax(logits, dim=-1)
-            correct = (preds == labels).sum().item()
-            
-            total_correct += correct
-            total_samples += labels.size(0)
-    
-    # Aggregate across all processes
-    total_correct_tensor = torch.tensor(total_correct, device=device)
-    total_samples_tensor = torch.tensor(total_samples, device=device)
-    
-    if dist.get_world_size() > 1:
-        torch.distributed.all_reduce(total_correct_tensor)
-        torch.distributed.all_reduce(total_samples_tensor)
-    
-    accuracy = total_correct_tensor.item() / total_samples_tensor.item()
-    return accuracy
 
 
 def create_train_dataloader(args):
@@ -215,7 +215,7 @@ def main(args: argparse.Namespace) -> int:
     
     # Create dataloaders
     data_loader_train = create_train_dataloader(args)
-    data_loader_val = create_val_dataloader_with_labels(args)
+    data_loader_val = create_val_dataloader(args)
 
     # Create VAE backbone and linear probe
     device = torch.device(f"cuda:{dist.get_global_rank()}")

@@ -17,7 +17,7 @@ echo "Learning rate: $lr"
 echo "Epochs: $epochs"
 
 # Run training with torchrun for distributed training
-torchrun --nproc_per_node=4 --nnodes=1 --node_rank=0 --master_addr=localhost --master_port=29501 \
+torchrun --nproc_per_node=8 --nnodes=1 --node_rank=0 --master_addr=localhost --master_port=29501 \
     linear_prob_dinov2.py \
     --batch_size $batch_size \
     --lr $lr \
