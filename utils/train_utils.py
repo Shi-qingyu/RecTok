@@ -219,7 +219,7 @@ def train_one_epoch_tokenizer(
 
         # Forward pass and generator loss
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            results = model(x)
+            results = model(x, mask_ratio=args.mask_ratio)
             reconstructions, posteriors = results
             # Normalize inputs to [0, 1] range for loss function
             targets = x * 0.5 + 0.5

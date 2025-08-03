@@ -446,9 +446,9 @@ class DeTok(nn.Module):
 
         return z_latents, posteriors, ids_restore
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor, mask_ratio: float = -1):
         """forward pass through the entire model."""
-        z_latents, result_dict, ids_restore = self.encode(x, sampling=self.training)
+        z_latents, result_dict, ids_restore = self.encode(x, sampling=self.training, mask_ratio=mask_ratio)
         decoded = self.decoder(z_latents, ids_restore=ids_restore)
         return decoded, result_dict
 
