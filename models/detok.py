@@ -187,7 +187,7 @@ class Encoder(nn.Module):
         """apply masked autoencoding random masking."""
         bsz, seq_len, chans = x.shape
         # mask: 0 for visible, 1 for masked
-        if self.mask_ratio == 0:
+        if self.mask_ratio == 0 or not self.training:
             # no masking
             rope = self.rope_tensor.expand(bsz, -1, -1)
             return x, torch.zeros(bsz, seq_len, device=x.device), None, rope
@@ -456,7 +456,7 @@ class DeTok(nn.Module):
 
     def tokenize(self, x: Tensor, sampling: bool = False) -> Tensor:
         """tokenize input image and normalize the latent tokens."""
-        z = self.encode(x, sampling=sampling, mask_ratio=0.0)[0]
+        z = self.encode(x, sampling=sampling, random_masking=False)[0]
         z = self.normalize_z(z)
         return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
 

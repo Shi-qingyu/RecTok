@@ -185,7 +185,7 @@ class Encoder(nn.Module):
         """apply masked autoencoding random masking."""
         bsz, seq_len, chans = x.shape
         # mask: 0 for visible, 1 for masked
-        if self.mask_ratio == 0:
+        if self.mask_ratio == 0 or not self.training:
             # no masking
             rope = self.rope_tensor.expand(bsz, -1, -1)
             return x, torch.zeros(bsz, seq_len, device=x.device), None, rope
