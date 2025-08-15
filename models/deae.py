@@ -131,6 +131,7 @@ class Encoder(nn.Module):
         model_size: str = "base",
         token_channels: int = 16,
         mask_ratio: float = 0.75,
+        random_mask_ratio: bool = True,
     ) -> None:
         super().__init__()
         self.img_size = img_size
@@ -139,6 +140,7 @@ class Encoder(nn.Module):
         self.model_size = model_size
         self.token_channels = token_channels
         self.mask_ratio = mask_ratio
+        self.random_mask_ratio = random_mask_ratio
         self.seq_len = self.grid_size**2
 
         size_dict = SIZE_DICT[self.model_size]
@@ -181,16 +183,22 @@ class Encoder(nn.Module):
         x = x.reshape(bsz, chans, h_ * patch_size, w_ * patch_size)
         return x
 
-    def mae_random_masking(self, x: Tensor, random_masking: bool = True):
+    def mae_random_masking(self, x: Tensor):
         """apply masked autoencoding random masking."""
         bsz, seq_len, chans = x.shape
         # mask: 0 for visible, 1 for masked
-        if self.mask_ratio == 0 or not self.training:
+        
+        if not self.training:
+            # no masking
+            rope = self.rope_tensor.expand(bsz, -1, -1)
+            return x, torch.zeros(bsz, seq_len, device=x.device), None, rope
+        
+        if self.mask_ratio == 0:
             # no masking
             rope = self.rope_tensor.expand(bsz, -1, -1)
             return x, torch.zeros(bsz, seq_len, device=x.device), None, rope
 
-        if random_masking:
+        if self.random_mask_ratio:
             mask_ratio = max(0.0, random.uniform(-0.1, self.mask_ratio))
         else:
             mask_ratio = self.mask_ratio
@@ -209,10 +217,10 @@ class Encoder(nn.Module):
         mask = torch.gather(mask, dim=1, index=ids_restore)
         return x_visible, mask, ids_restore, rope_visible
 
-    def forward(self, x: Tensor, random_masking: bool = True):
+    def forward(self, x: Tensor):
         """forward pass through encoder."""
         x = self.patch_embed(x) + self.positional_embedding
-        x, _, ids_restore, rope = self.mae_random_masking(x, random_masking=random_masking)
+        x, _, ids_restore, rope = self.mae_random_masking(x)
 
         x = self.ln_pre(x)
         for block in self.transformer:
@@ -321,6 +329,7 @@ class DeAE(nn.Module):
         vit_dec_model_size: str = "base",
         token_channels: int = 16,
         mask_ratio: float = 0.75,
+        random_mask_ratio: bool = True,
         gamma: float = 3.0,
         use_additive_noise: bool = False,
         # normalization parameters used for generative model training
@@ -337,6 +346,7 @@ class DeAE(nn.Module):
             model_size=vit_enc_model_size,
             token_channels=token_channels,
             mask_ratio=mask_ratio,
+            random_mask_ratio=random_mask_ratio,
         )
         self.decoder = Decoder(
             img_size=img_size,
@@ -410,9 +420,9 @@ class DeAE(nn.Module):
         """normalize latent tokens."""
         return (z - self.mean.to(z)) * self.scale_factor / self.std.to(z)
 
-    def encode(self, x: Tensor, random_masking: bool = True, noise_level: float = -1.0):
+    def encode(self, x: Tensor, noise_level: float = -1.0):
         """encode image into latent tokens."""
-        z, ids_restore = self.encoder(x, random_masking=random_masking)
+        z, ids_restore = self.encoder(x)
 
         if self.training and self.gamma > 0.0:
             device = z.device
@@ -430,15 +440,15 @@ class DeAE(nn.Module):
 
         return z, ids_restore
 
-    def forward(self, x: Tensor, random_masking: bool = True):
+    def forward(self, x: Tensor):
         """forward pass through the entire model."""
-        z, ids_restore = self.encode(x=x, random_masking=random_masking)
+        z, ids_restore = self.encode(x=x)
         decoded = self.decoder(z, ids_restore=ids_restore)
         return decoded
 
     def tokenize(self, x: Tensor) -> Tensor:
         """tokenize input image and normalize the latent tokens."""
-        z = self.encode(x, random_masking=False)[0]
+        z = self.encode(x)[0]
         z = self.normalize_z(z)
         return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
 

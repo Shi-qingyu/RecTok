@@ -134,6 +134,7 @@ def create_generation_model(args):
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
                 mask_ratio=0.0,
+                random_mask_ratio=False,
             )
         elif args.tokenizer in models.DeAE_models:
             tokenizer = models.DeAE_models[args.tokenizer](
@@ -141,6 +142,7 @@ def create_generation_model(args):
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
                 mask_ratio=0.0,
+                random_mask_ratio=False,
             )
         else:
             raise ValueError(f"Unsupported tokenizer {args.tokenizer}")
@@ -272,6 +274,7 @@ def create_reconstruction_model(args):
             patch_size=args.patch_size,
             token_channels=args.token_channels,
             mask_ratio=args.mask_ratio,
+            random_mask_ratio=args.random_masking,
             gamma=args.gamma,
         )
     elif args.model in models.DeAE_models:
@@ -280,6 +283,7 @@ def create_reconstruction_model(args):
             patch_size=args.patch_size,
             token_channels=args.token_channels,
             mask_ratio=args.mask_ratio,
+            random_mask_ratio=args.random_masking,
             gamma=args.gamma,
         )
     else:

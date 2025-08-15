@@ -219,7 +219,7 @@ def train_one_epoch_tokenizer(
 
         # Forward pass and generator loss
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            results = model(x, random_masking=args.random_masking)
+            results = model(x)
             if isinstance(results, list) and len(results) == 2:
                 reconstructions, posteriors = results
             elif isinstance(results, tuple) and len(results) == 2:
