@@ -274,7 +274,7 @@ def create_reconstruction_model(args):
             patch_size=args.patch_size,
             token_channels=args.token_channels,
             mask_ratio=args.mask_ratio,
-            random_mask_ratio=args.random_masking,
+            random_mask_ratio=args.random_mask_ratio,
             gamma=args.gamma,
         )
     elif args.model in models.DeAE_models:
@@ -283,7 +283,7 @@ def create_reconstruction_model(args):
             patch_size=args.patch_size,
             token_channels=args.token_channels,
             mask_ratio=args.mask_ratio,
-            random_mask_ratio=args.random_masking,
+            random_mask_ratio=args.random_mask_ratio,
             gamma=args.gamma,
         )
     else:
