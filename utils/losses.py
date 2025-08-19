@@ -84,11 +84,11 @@ def hinge_d_loss(logits_real: Tensor, logits_fake: Tensor) -> Tensor:
 
 
 class LPIPS(nn.Module):
-    def __init__(self, ckpt_pth="work_dirs/ckpts/lpips", use_dropout=True):
+    def __init__(self, ckpt_pth="offline_models/lpips", use_dropout=True):
         super().__init__()
         self.scaling_layer = ScalingLayer()
         self.chns = [64, 128, 256, 512, 512]  # VGG16 features
-        self.net = vgg16(pretrained=True, requires_grad=False)
+        self.net = vgg16(pretrained=False, requires_grad=False)
         self.lin0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
         self.lin1 = NetLinLayer(self.chns[1], use_dropout=use_dropout)
         self.lin2 = NetLinLayer(self.chns[2], use_dropout=use_dropout)
@@ -100,7 +100,7 @@ class LPIPS(nn.Module):
 
         self._data_range_checked = False
 
-    def load_from_pretrained(self, ckpt_pth="work_dirs/ckpts/lpips", name="vgg_lpips"):
+    def load_from_pretrained(self, ckpt_pth="offline_models/lpips", name="vgg_lpips"):
         ckpt = get_ckpt_path(name, ckpt_pth, check=True)
         self.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")), strict=False)
         logger.info("Loaded pretrained LPIPS loss from {}".format(ckpt))
@@ -142,9 +142,14 @@ class NetLinLayer(nn.Module):
 
 
 class vgg16(nn.Module):
-    def __init__(self, requires_grad: bool = False, pretrained: bool = True):
+    def __init__(self, requires_grad: bool = False, pretrained: bool = False):
         super(vgg16, self).__init__()
-        vgg_pretrained_features = models.vgg16(pretrained=pretrained).features
+        ckpt = os.path.join("offline_models", "vgg16.pth")
+        model = models.vgg16(pretrained=pretrained)
+        model.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")))
+        logger.info(f"Loaded vgg16 from {ckpt}")
+        
+        vgg_pretrained_features = model.features
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
         self.slice3 = nn.Sequential()
@@ -257,7 +262,10 @@ class PerceptualLoss(torch.nn.Module):
             self.lpips = LPIPS().eval()
 
         if "convnext_s" in model_name:
-            self.convnext = models.convnext_small(weights=models.ConvNeXt_Small_Weights.IMAGENET1K_V1).eval()
+            ckpt = os.path.join("offline_models", "convnext_small-0c510722.pth")
+            self.convnext = models.convnext_small(weights=None).eval()
+            self.convnext.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")))
+            logger.info(f"Loaded convnext_small from {ckpt}")
 
         if "lpips" in model_name and "convnext_s" in model_name:
             loss_config = model_name.split("-")[-2:]
