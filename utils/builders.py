@@ -276,6 +276,7 @@ def create_reconstruction_model(args):
             mask_ratio=args.mask_ratio,
             random_mask_ratio=args.random_mask_ratio,
             gamma=args.gamma,
+            use_vf=args.use_vf_loss,
         )
     elif args.model in models.DeAE_models:
         model = models.DeAE_models[args.model](
@@ -285,6 +286,7 @@ def create_reconstruction_model(args):
             mask_ratio=args.mask_ratio,
             random_mask_ratio=args.random_mask_ratio,
             gamma=args.gamma,
+            use_vf=args.use_vf_loss,
         )
     else:
         raise ValueError(f"Unsupported model {args.model}")
@@ -348,6 +350,7 @@ def create_loss_module(args):
         perceptual_loss=getattr(args, "perceptual_loss", "lpips-convnext_s-1.0-0.1"),
         perceptual_weight=getattr(args, "perceptual_weight", 1.1),
         kl_weight=args.kl_loss_weight,
+        vf_weight=args.vf_loss_weight,
     )
     loss_module.cuda()
     logger.info("====Loss Module=====")

@@ -235,7 +235,7 @@ def train_one_epoch_tokenizer(
             targets = x * 0.5 + 0.5
             reconstructions = reconstructions * 0.5 + 0.5
             ae_loss, loss_dict = loss_fn(
-                input=targets, 
+                inputs=targets, 
                 reconstructions=reconstructions, 
                 epoch=epoch,
                 posteriors=posteriors,
@@ -267,7 +267,7 @@ def train_one_epoch_tokenizer(
             # this loss module assumes that both x and reconstructed are in [0, 1]
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 discriminator_loss, loss_dict_discriminator = loss_fn(
-                    input=targets, 
+                    inputs=targets, 
                     reconstructions=reconstructions, 
                     epoch=epoch,
                     mode="discriminator",

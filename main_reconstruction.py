@@ -153,6 +153,8 @@ def get_args_parser():
     parser.add_argument("--random_mask_ratio", action="store_true")
     parser.add_argument("--gamma", default=0.0, type=float, help="noise standard deviation for training")
     parser.add_argument("--use_additive_noise", action="store_true")
+    parser.add_argument("--use_vf_loss", action="store_true")
+    parser.add_argument("--vf_model_type", default="dinov2", type=str)
 
     parser.add_argument("--no_load_ckpt", action="store_true")
     parser.add_argument("--train_decoder_only", action="store_true")
@@ -164,6 +166,7 @@ def get_args_parser():
     parser.add_argument("--discriminator_start_epoch", default=20, type=int)
     parser.add_argument("--discriminator_weight", default=0.5, type=float)
     parser.add_argument("--kl_loss_weight", default=1e-6, type=float)
+    parser.add_argument("--vf_loss_weight", default=0.0, type=float)
 
     # logging parameters
     parser.add_argument("--output_dir", default="./work_dirs")

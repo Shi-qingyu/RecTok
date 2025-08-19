@@ -363,6 +363,7 @@ class DeTok(nn.Module):
         # model configuration
         self.seq_h = img_size // patch_size
         self.width = SIZE_DICT[vit_enc_model_size]["width"]
+        self.token_channels = token_channels
         self.use_additive_noise = use_additive_noise
         self.gamma = gamma
         self.scale_factor = scale_factor
@@ -378,12 +379,12 @@ class DeTok(nn.Module):
                 checkpoint_path = os.path.join("offline_models", "dinov2_vit_large_patch14", "pytorch_model.bin")
                 state_dict = torch.load(checkpoint_path, map_location="cpu")
 
-                self.foundation_model = timm.create_model("vit_large_patch14_dinov2.lvd142m", pretrained=False)
+                self.foundation_model = timm.create_model("vit_large_patch14_dinov2.lvd142m", pretrained=False, dynamic_img_size=True)
                 self.foundation_model.load_state_dict(state_dict["model_state_dict"])
                 self.foundation_model.requires_grad_(False)
-                logger.info(f"Loaded foundation model from {checkpoint_path}")
+                logger.info(f"[VF Model] Loaded foundation model from {checkpoint_path}")
 
-                self.vf_feature_dim = self.foundation_model.feature_dim
+                self.vf_feature_dim = self.foundation_model.num_features
                 self.linear_proj = nn.Linear(self.vf_feature_dim, self.token_channels)
             else:
                 raise ValueError(f"Unknown foundation model type: {vf_model_type}")
