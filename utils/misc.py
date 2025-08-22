@@ -292,12 +292,9 @@ def save_checkpoint(
     if not dist.is_main_process():
         return
     
-    model_state_dict = {k: v for k, v in model.state_dict().items() if v.requires_grad}
-    model_ema_state_dict = {k: v for k, v in model_ema.state_dict().items() if k in model_state_dict} if model_ema is not None else None
-        
     checkpoint = {
-        "model": model_state_dict,
-        "model_ema": model_ema_state_dict,
+        "model": model.state_dict(),
+        "model_ema": model_ema.state_dict() if model_ema is not None else None,
         "optimizer": optimizer.state_dict(),
         "loss_scaler": loss_scaler.state_dict(),
         "epoch": epoch,
