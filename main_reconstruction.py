@@ -172,7 +172,7 @@ def get_args_parser():
     parser.add_argument("--discriminator_weight", default=0.5, type=float)
     parser.add_argument("--kl_loss_weight", default=1e-6, type=float)
     parser.add_argument("--vf_loss_weight", default=0.0, type=float)
-    parser.add_argument("--aux_loss", default="default", type=str)
+    parser.add_argument("--aux_loss", default="cosine", type=str)
     parser.add_argument("--aux_loss_weight", default=0.0, type=float)
 
     # logging parameters

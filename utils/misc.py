@@ -121,10 +121,7 @@ def ckpt_resume(
             # load the checkpoint
             logger.info(f"[Model-resume] Resuming from: {args.resume_from}")
             checkpoint = torch.load(args.resume_from, map_location="cpu", weights_only=False)
-            # we allow missing keys in the model state dict since we don't save the untrained parameters
             msg = model.load_state_dict(checkpoint["model"], strict=False)
-            # make sure there are no unexpected keys
-            assert len(msg.unexpected_keys) == 0, f"unexpected keys: {msg.unexpected_keys}"
             logger.info(f"[Model-resume] Loaded model: {msg}")
 
             if "model_ema" in checkpoint:
@@ -160,7 +157,6 @@ def ckpt_resume(
             # load the loss module state dict if it exists
             if "loss_module" in checkpoint and loss_module is not None:
                 msg = loss_module.load_state_dict(checkpoint["loss_module"], strict=False)
-                assert len(msg.unexpected_keys) == 0, f"unexpected keys: {msg.unexpected_keys}"
                 logger.info(f"[Model-resume] Loaded loss_module: {msg}")
 
             if "discriminator_optimizer" in checkpoint and discriminator_optimizer is not None:

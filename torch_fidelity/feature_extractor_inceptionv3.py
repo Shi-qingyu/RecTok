@@ -4,6 +4,7 @@
 
 import sys
 from contextlib import redirect_stdout
+import os
 
 import torch
 import torch.nn as nn
@@ -89,8 +90,13 @@ class FeatureExtractorInceptionV3(FeatureExtractorBase):
         self.fc = nn.Linear(2048, 1008)
 
         if feature_extractor_weights_path is None:
-            with redirect_stdout(sys.stderr):
-                state_dict = load_state_dict_from_url(URL_INCEPTION_V3, progress=get_kwarg("verbose", kwargs))
+            try:
+                with redirect_stdout(sys.stderr):
+                    state_dict = load_state_dict_from_url(URL_INCEPTION_V3, progress=get_kwarg("verbose", kwargs))
+            except:
+                offline_path = os.path.join(os.path.dirname(__file__), "..", "offline_models", os.path.basename(URL_INCEPTION_V3))
+                vassert(os.path.exists(offline_path), f"Offline weights not found at {offline_path}")
+                state_dict = torch.load(offline_path, map_location="cpu")
         else:
             state_dict = torch.load(feature_extractor_weights_path)
         self.load_state_dict(state_dict)

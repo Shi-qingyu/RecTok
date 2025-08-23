@@ -145,9 +145,14 @@ class vgg16(nn.Module):
     def __init__(self, requires_grad: bool = False, pretrained: bool = False):
         super(vgg16, self).__init__()
         ckpt = os.path.join("offline_models", "vgg16.pth")
-        model = models.vgg16(pretrained=pretrained)
-        model.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")))
-        logger.info(f"Loaded vgg16 from {ckpt}")
+
+        if os.path.exists(ckpt):
+            model = models.vgg16(pretrained=False)
+            model.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")))
+            logger.info(f"Loaded vgg16 from {ckpt}")
+        else:
+            model = models.vgg16(pretrained=True)
+            logger.info(f"Loaded vgg16 from timm")
         
         vgg_pretrained_features = model.features
         self.slice1 = nn.Sequential()
@@ -264,9 +269,13 @@ class PerceptualLoss(torch.nn.Module):
 
         if "convnext_s" in model_name:
             ckpt = os.path.join("offline_models", "convnext_small-0c510722.pth")
-            self.convnext = models.convnext_small(weights=None).eval()
-            self.convnext.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")))
-            logger.info(f"Loaded convnext_small from {ckpt}")
+            if os.path.exists(ckpt):
+                self.convnext = models.convnext_small(weights=False).eval()
+                self.convnext.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")))
+                logger.info(f"Loaded convnext_small from {ckpt}")
+            else:
+                self.convnext = models.convnext_small(weights=True).eval()
+                logger.info(f"Loaded convnext_small from timm")
 
         if "lpips" in model_name and "convnext_s" in model_name:
             loss_config = model_name.split("-")[-2:]
@@ -367,7 +376,7 @@ class VFLoss(nn.Module):
 
 
 class AuxLoss(nn.Module):
-    def __init__(self, aux_loss: str = "default"):
+    def __init__(self, aux_loss: str = "cosine"):
         super().__init__()
         self.aux_loss = aux_loss
 
@@ -377,8 +386,6 @@ class AuxLoss(nn.Module):
         elif self.aux_loss == "l1":
             aux_loss = F.l1_loss(aux_feature, pred_aux_feature, reduction="mean")
         elif self.aux_loss == "cosine":
-            aux_loss = F.cosine_similarity(aux_feature, pred_aux_feature, dim=-1, eps=1e-8).mean()
-        elif self.aux_loss == "default":
             aux_feature = F.normalize(aux_feature, dim=-1)
             pred_aux_feature = F.normalize(pred_aux_feature, dim=-1)
             
@@ -399,7 +406,7 @@ class ReconstructionLoss(nn.Module):
         reconstruction_loss: str = "l2",
         reconstruction_weight: float = 1.0,
         vf_weight: float = 0.0,
-        aux_loss: str = "default",
+        aux_loss: str = "cosine",
         aux_weight: float = 0.0,
         kl_weight: float = 1e-6,
         logvar_init: float = 0.0,

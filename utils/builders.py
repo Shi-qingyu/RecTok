@@ -135,8 +135,10 @@ def create_generation_model(args):
                 img_size=args.img_size,
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
+                gamma=0.0,
                 mask_ratio=0.0,
-                random_mask_ratio=False,
+                use_vf=False,
+                use_aux_decoder=False,
             )
         elif args.tokenizer in models.DeAE_models:
             tokenizer = models.DeAE_models[args.tokenizer](
