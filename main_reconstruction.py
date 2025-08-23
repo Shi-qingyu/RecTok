@@ -188,7 +188,7 @@ def get_args_parser():
     parser.add_argument("--resume_from", default=None, help="resume model weights and optimizer state")
     parser.add_argument("--load_from", type=str, default=None, help="load from pretrained model")
     parser.add_argument("--keep_n_ckpts", default=1, type=int, help="keep the last n checkpoints")
-    parser.add_argument("--milestone_interval", default=100, type=int, help="keep checkpoints every n epochs")
+    parser.add_argument("--milestone_interval", default=10, type=int, help="keep checkpoints every n epochs")
 
 
     # evaluation parameters
