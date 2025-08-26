@@ -308,11 +308,13 @@ class Encoder(nn.Module):
         x = self.ln_pre(x)
         for block in self.transformer:
             x = block(x, rope)
+        second_last_feature = x
+        
         x = self.ln_post(x)
 
         tokens = self.latent_head(x)
 
-        return tokens, ids_restore, ids_keep
+        return tokens, ids_restore, ids_keep, second_last_feature
 
 
 class Decoder(nn.Module):
@@ -484,7 +486,6 @@ class DeTok(nn.Module):
                     token_channels=token_channels,
                     aux_embed_dim=aux_feature_dim,
                 )
-                logger.info(f"[Auxiliary Decoder] Initialized auxiliary decoder")
 
         # setup to-posteriors function
         self.to_posteriors = partial(DiagonalGaussianDistribution, channel_dim=-1)
@@ -555,7 +556,7 @@ class DeTok(nn.Module):
 
     def encode(self, x: Tensor, sampling: bool = False, noise_level: float = -1.0):
         """encode image into latent tokens."""
-        z, ids_restore, ids_keep = self.encoder(x)
+        z, ids_restore, ids_keep, second_last_feature = self.encoder(x)
 
         posteriors = self.to_posteriors(z)
         z_latents = posteriors.sample() if sampling else posteriors.mean
@@ -574,11 +575,11 @@ class DeTok(nn.Module):
             else:
                 z_latents = (1 - noise_level_tensor) * z_latents + noise_level_tensor * noise
 
-        return z_latents, posteriors, ids_restore, ids_keep
+        return z_latents, posteriors, ids_restore, ids_keep, second_last_feature
 
     def forward(self, x: Tensor):
         """forward pass through the entire model."""
-        z_latents, posteriors, ids_restore, ids_keep = self.encode(x, sampling=self.training)
+        z_latents, posteriors, ids_restore, ids_keep, second_last_feature = self.encode(x, sampling=self.training)
 
         if self.use_vf and self.training:
             if self.vf_model_type == "dinov2":
