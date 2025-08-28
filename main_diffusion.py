@@ -49,7 +49,7 @@ def main(args: argparse.Namespace) -> int:
             args, should_flip=False, batch_size=args.tokenizer_bsz,
             return_path=True, drop_last=False
         )
-        # (B, C, H, W) for chan_dim=2 or (B, seq_len, C) for chan_dim=1
+        # (B, C, H, W) for chan_dim=1 or (B, seq_len, C) for chan_dim=2
         chan_dim = 2 if (args.tokenizer in models.DeTok_models or args.tokenizer in models.DeAE_models) else 1
         
         # collect stats
@@ -63,7 +63,7 @@ def main(args: argparse.Namespace) -> int:
         )
         # update tokenizer with computed statistics
         mean, std = result_dict["channel"]
-        if mean.ndim > 0 and hasattr(tokenizer, "encode_into_posteriors"):
+        if mean.ndim > 0 and hasattr(tokenizer, "encode_into_posteriors") and not tokenizer.use_second_last_feature:
             n_chans = len(mean) // 2
             mean, std = mean[:n_chans], std[:n_chans]
         tokenizer.reset_stats(mean, std)
