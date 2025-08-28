@@ -1,6 +1,7 @@
 import os
 import logging
 
+import torch.nn as nn
 import torch.utils.data
 import torchvision.transforms as transforms
 import timm
@@ -129,22 +130,24 @@ def create_generation_model(args):
     logger.info("Creating generation models.")
     if args.tokenizer is not None:
         if args.tokenizer in models.VAE_models:
-            tokenizer = models.VAE_models[args.tokenizer]()
+            tokenizer: nn.Module = models.VAE_models[args.tokenizer]()
         elif args.tokenizer in models.DeTok_models:
-            tokenizer = models.DeTok_models[args.tokenizer](
+            tokenizer: nn.Module = models.DeTok_models[args.tokenizer](
                 img_size=args.img_size,
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
+                use_second_last_feature=args.use_second_last_feature if hasattr(args, "use_second_last_feature") else False,
                 gamma=0.0,
                 mask_ratio=0.0,
                 use_vf=False,
                 use_aux_decoder=False,
             )
         elif args.tokenizer in models.DeAE_models:
-            tokenizer = models.DeAE_models[args.tokenizer](
+            tokenizer: nn.Module = models.DeAE_models[args.tokenizer](
                 img_size=args.img_size,
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
+                use_second_last_feature=args.use_second_last_feature if hasattr(args, "use_second_last_feature") else False,
                 mask_ratio=0.0,
                 random_mask_ratio=False,
             )
@@ -190,7 +193,7 @@ def create_generation_model(args):
             img_size=args.img_size,
             patch_size=args.patch_size,
             tokenizer_patch_size=args.tokenizer_patch_size,
-            token_channels=args.token_channels,
+            token_channels=args.token_channels if not args.use_second_last_feature else tokenizer.width,
             label_drop_prob=args.label_drop_prob,
             num_classes=args.num_classes,
             num_sampling_steps=args.num_sampling_steps,

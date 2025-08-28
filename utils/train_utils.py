@@ -1103,5 +1103,4 @@ def collect_tokenizer_stats(
         except Exception as e:
             logger.error(f"failed to cache statistics: {e}")
 
-    global_stats["tokenizer_type"] = tokenizer_type
     return global_stats

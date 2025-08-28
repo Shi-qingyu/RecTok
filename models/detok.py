@@ -539,7 +539,7 @@ class DeTok(nn.Module):
             n_chans = mean.shape[-1]
             self.register_buffer("mean", _to_tensor(mean).reshape(1, 1, n_chans), persistent=False)
             self.register_buffer("std", _to_tensor(std).reshape(1, 1, n_chans), persistent=False)
-        logger.info(f"Resetting mean and std ({mean.shape=}, {std.shape=})")
+        logger.info(f"Resetting mean and std ({mean.shape}, {std.shape})")
         logger.info(f"Mean: {self.mean}")
         logger.info(f"Std: {self.std}")
 
@@ -636,15 +636,24 @@ class DeTok(nn.Module):
 
     def tokenize(self, x: Tensor, sampling: bool = False) -> Tensor:
         """tokenize input image and normalize the latent tokens."""
-        z = self.encode(x, sampling=sampling)[0]
-        z = self.normalize_z(z)
+        if not self.use_second_last_feature:
+            z = self.encode(x, sampling=sampling)[0]
+            z = self.normalize_z(z)
+        else:
+            z = self.encode(x, sampling=sampling)[-1]
         return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
 
     def detokenize(self, z: Tensor) -> Tensor:
         """detokenize latent representation back to image."""
         z = rearrange(z, "b c h w -> b (h w) c")
-        z = self.denormalize_z(z)
-        decoded_images = self.decoder(z)
+        if not self.use_second_last_feature:
+            z = self.denormalize_z(z)
+            decoded_images = self.decoder(z)
+        else:
+            z = self.encoder.ln_post(z)
+            z = self.encoder.latent_head(z)
+            z = self.to_posteriors(z).mean()
+            decoded_images = self.decoder(z)
         return torch.clamp(decoded_images * 0.5 + 0.5, 0.0, 1.0)
 
     def sample_from_moments(self, moments: Tensor) -> Tensor:

@@ -44,7 +44,7 @@ def main(args: argparse.Namespace) -> int:
     model_wo_ddp = model
 
     # handle token caching or tokenizer statistics collection
-    if args.collect_tokenizer_stats:
+    if args.collect_tokenizer_stats and not args.use_second_last_feature:
         tmp_data_loader = create_train_dataloader(
             args, should_flip=False, batch_size=args.tokenizer_bsz,
             return_path=True, drop_last=False
@@ -54,14 +54,16 @@ def main(args: argparse.Namespace) -> int:
         
         # collect stats
         result_dict = collect_tokenizer_stats(
-            tokenizer, tmp_data_loader, chan_dim=chan_dim,
+            tokenizer, 
+            tmp_data_loader, 
+            chan_dim=chan_dim,
             stats_dict_key=args.stats_key,
             stats_dict_path=args.stats_cache_path,
             overwrite_stats=args.overwrite_stats,
         )
         # update tokenizer with computed statistics
         mean, std = result_dict["channel"]
-        if mean.ndim > 0 and result_dict["tokenizer_type"] == "vae":
+        if mean.ndim > 0 and hasattr(tokenizer, "encode_into_posteriors"):
             n_chans = len(mean) // 2
             mean, std = mean[:n_chans], std[:n_chans]
         tokenizer.reset_stats(mean, std)
@@ -210,6 +212,7 @@ def get_args_parser():
     parser.add_argument("--token_channels", default=16, type=int)
     parser.add_argument("--tokenizer_patch_size", default=16, type=int)
     parser.add_argument("--use_ema_tokenizer", action="store_true")
+    parser.add_argument("--use_second_last_feature", action="store_true")
 
     # tokenizer cache parameters
     parser.add_argument("--collect_tokenizer_stats", action="store_true")
