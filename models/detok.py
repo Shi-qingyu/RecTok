@@ -641,13 +641,14 @@ class DeTok(nn.Module):
             z = self.normalize_z(z)
         else:
             z = self.encode(x, sampling=sampling)[-1]
+            z = self.normalize_z(z)
         return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
 
     def detokenize(self, z: Tensor) -> Tensor:
         """detokenize latent representation back to image."""
         z = rearrange(z, "b c h w -> b (h w) c")
+        z = self.denormalize_z(z)
         if not self.use_second_last_feature:
-            z = self.denormalize_z(z)
             decoded_images = self.decoder(z)
         else:
             z = self.encoder.ln_post(z)

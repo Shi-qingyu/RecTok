@@ -44,7 +44,7 @@ def main(args: argparse.Namespace) -> int:
     model_wo_ddp = model
 
     # handle token caching or tokenizer statistics collection
-    if args.collect_tokenizer_stats and not args.use_second_last_feature:
+    if args.collect_tokenizer_stats:
         tmp_data_loader = create_train_dataloader(
             args, should_flip=False, batch_size=args.tokenizer_bsz,
             return_path=True, drop_last=False
