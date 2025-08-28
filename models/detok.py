@@ -652,7 +652,7 @@ class DeTok(nn.Module):
         else:
             z = self.encoder.ln_post(z)
             z = self.encoder.latent_head(z)
-            z = self.to_posteriors(z).mean()
+            z = self.to_posteriors(z).mean
             decoded_images = self.decoder(z)
         return torch.clamp(decoded_images * 0.5 + 0.5, 0.0, 1.0)
 

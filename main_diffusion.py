@@ -69,8 +69,8 @@ def main(args: argparse.Namespace) -> int:
         tokenizer.reset_stats(mean, std)
         
         del tmp_data_loader
-        data_dict = next(iter(data_loader_train))
-        visualize_tokenizer(args, tokenizer, ema_model=None, data_dict=data_dict)
+    data_dict = next(iter(data_loader_train))
+    visualize_tokenizer(args, tokenizer, ema_model=None, data_dict=data_dict)
 
     # setup distributed training
     if distributed.is_enabled():
