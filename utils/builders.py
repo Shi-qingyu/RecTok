@@ -283,12 +283,11 @@ def create_reconstruction_model(args):
             mask_ratio=args.mask_ratio,
             gamma=args.gamma,
             random_mask_ratio=args.random_mask_ratio if hasattr(args, "random_mask_ratio") else True,
-            use_vf=args.use_vf_loss if hasattr(args, "use_vf_loss") else False,
-            vf_model_type=args.vf_model_type if hasattr(args, "vf_model_type") else "dinov2",
-            use_aux_decoder=args.use_aux_decoder if hasattr(args, "use_aux_decoder") else False,
+            vf_model_type=args.vf_model_type if hasattr(args, "vf_model_type") else "",
+            aux_model_type=args.aux_model_type if hasattr(args, "aux_model_type") else "",
+            use_adaptive_channels=args.use_adaptive_channels if hasattr(args, "use_adaptive_channels") else False,
             use_second_last_feature=args.use_second_last_feature if hasattr(args, "use_second_last_feature") else False,
             vit_aux_model_size=args.vit_aux_model_size if hasattr(args, "vit_aux_model_size") else "tiny",
-            aux_model_type=args.aux_model_type if hasattr(args, "aux_model_type") else "dinov2",
         )
     elif args.model in models.DeAE_models:
         model = models.DeAE_models[args.model](

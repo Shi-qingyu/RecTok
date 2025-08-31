@@ -414,8 +414,7 @@ class DeTok(nn.Module):
         vit_dec_model_size: str = "base",
         vit_aux_model_size: str = "tiny",
         token_channels: int = 16,
-        use_vf: bool = False,
-        use_aux_decoder: bool = False,
+        use_adaptive_channels: bool = False,
         use_second_last_feature: bool = False,
         vf_model_type: str = "dinov2",
         aux_model_type: str = "dinov2",
@@ -453,19 +452,20 @@ class DeTok(nn.Module):
         self.use_additive_noise = use_additive_noise
         self.gamma = gamma
         self.scale_factor = scale_factor
-        self.use_vf = use_vf
         self.vf_model_type = vf_model_type
-        self.use_aux_decoder = use_aux_decoder
         self.aux_model_type = aux_model_type
+        self.use_adaptive_channels = use_adaptive_channels
         self.use_second_last_feature = use_second_last_feature
         
         # initialize weights
         self.apply(self._init_weights)
 
         # initialize vf loss
-        if use_vf:
+        self.use_vf = False
+        if vf_model_type != "":
+            self.use_vf = True
             if vf_model_type == "dinov2":
-                self.foundation_model = create_foundation_model(vf_model_type)
+                self.foundation_model = create_foundation_model(vf_model_type)[0]
                 self.foundation_model.eval()
                 self.foundation_model.requires_grad_(False)
 
@@ -474,10 +474,19 @@ class DeTok(nn.Module):
             else:
                 raise ValueError(f"Unknown foundation model type: {vf_model_type}")
         
-        if use_aux_decoder:
+        self.use_aux = False
+        if aux_model_type != "":
+            self.use_aux = True
             self.aux_foundation_models = nn.ModuleDict()
             self.aux_foundation_models_transforms = dict()
             self.aux_decoders = nn.ModuleDict()
+
+            if use_second_last_feature:
+                aux_token_channels = self.width
+            elif use_adaptive_channels:
+                aux_token_channels = self.token_channels // 2
+            else:
+                aux_token_channels = self.token_channels
 
             if "dinov2" in aux_model_type:
                 aux_foundation_model, transforms = create_foundation_model("dinov2")
@@ -490,7 +499,7 @@ class DeTok(nn.Module):
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
-                    token_channels=token_channels if not use_second_last_feature else self.width,
+                    token_channels=aux_token_channels,
                     aux_embed_dim=aux_foundation_model.num_features,
                 )
             
@@ -505,7 +514,7 @@ class DeTok(nn.Module):
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
-                    token_channels=token_channels if not use_second_last_feature else self.width,
+                    token_channels=aux_token_channels,
                     aux_embed_dim=aux_foundation_model.num_features,
                 )
 
@@ -619,10 +628,18 @@ class DeTok(nn.Module):
         else:
             vf_feature = None
 
-        if self.use_aux_decoder and self.training:
-            x_aux = (x + 1.0) * 0.5
+        if self.use_aux and self.training:
+            x_aux = x * 0.5 + 1.0
             aux_features = []
             pred_aux_features = []
+
+            if self.use_second_last_feature:
+                aux_z_latents = second_last_feature
+            elif self.use_adaptive_channels:
+                aux_z_latents = z_latents[:, :, :z_latents.shape[-1] // 2]
+            else:
+                aux_z_latents = z_latents
+
             for model_type in self.aux_foundation_models.keys():
                 aux_foundation_model = self.aux_foundation_models[model_type]
                 transforms = self.aux_foundation_models_transforms[model_type]
@@ -633,21 +650,14 @@ class DeTok(nn.Module):
                     x_dino = F.interpolate(x_dino, size=(224, 224), mode='bilinear', align_corners=False)
                     x_dino = x_dino.to(dtype=x.dtype)
                     aux_features.append(aux_foundation_model.forward_features(x_dino)[:, 1:])   # [B, 256, dim]
-                    
-                    if self.use_second_last_feature:
-                        pred_aux_features.append(aux_decoder(second_last_feature, ids_restore=ids_restore))
-                    else:
-                        pred_aux_features.append(aux_decoder(z_latents, ids_restore=ids_restore))
-                        
+                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
+
                 elif model_type == "siglip":
                     x_siglip = transforms(x_aux)
                     x_siglip = x_siglip.to(dtype=x.dtype)
                     aux_features.append(aux_foundation_model.forward_features(x_siglip))   # [B, 256, dim]
-                    
-                    if self.use_second_last_feature:
-                        pred_aux_features.append(aux_decoder(second_last_feature, ids_restore=ids_restore))
-                    else:
-                        pred_aux_features.append(aux_decoder(z_latents, ids_restore=ids_restore))
+                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
+
                 else:
                     raise ValueError(f"Unknown foundation model type: {model_type}")
                 
