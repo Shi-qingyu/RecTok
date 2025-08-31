@@ -493,7 +493,6 @@ class DeTok(nn.Module):
                     token_channels=token_channels if not use_second_last_feature else self.width,
                     aux_embed_dim=aux_foundation_model.num_features,
                 )
-    
             
             if "siglip" in aux_model_type:
                 aux_foundation_model, transforms = create_foundation_model("siglip")
@@ -639,6 +638,7 @@ class DeTok(nn.Module):
                         pred_aux_features.append(aux_decoder(second_last_feature, ids_restore=ids_restore))
                     else:
                         pred_aux_features.append(aux_decoder(z_latents, ids_restore=ids_restore))
+                        
                 elif model_type == "siglip":
                     x_siglip = transforms(x_aux)
                     x_siglip = x_siglip.to(dtype=x.dtype)
