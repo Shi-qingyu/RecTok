@@ -208,6 +208,7 @@ def get_args_parser():
     parser.add_argument("--ema_rate", default=0.999, type=float)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--grad_clip", type=float, default=3.0)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
     parser.add_argument("--grad_checkpointing", action="store_true", help="Use gradient checkpointing")
     parser.add_argument("--beta1", type=float, default=0.9, help="Beta1 for AdamW optimizer")
     parser.add_argument("--beta2", type=float, default=0.95, help="Beta2 for AdamW optimizer")

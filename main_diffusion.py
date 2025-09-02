@@ -139,7 +139,7 @@ def main(args: argparse.Namespace) -> int:
                 args, model_wo_ddp, ema_model, tokenizer, epoch + 1, wandb_logger,
                 use_ema=True, num_images=args.num_images_for_eval_and_search, cfg=args.cfg
             )
-
+            
     # final evaluation
     total_time = int(time.time() - start_time + args.last_elapsed_time)
     logger.info(f"Training time {str(datetime.timedelta(seconds=total_time))}")

@@ -20,6 +20,7 @@ from PIL import Image, ImageFile
 from torch.distributed import ReduceOp
 from tqdm import tqdm, trange
 
+from models.ema import SimpleEMAModel
 import utils.distributed as dist
 import utils.misc as misc
 from utils.logger import MetricLogger, SmoothedValue, setup_logging, setup_wandb, WandbLogger
@@ -190,7 +191,7 @@ def train_one_epoch_tokenizer(
     loss_scaler: misc.NativeScalerWithGradNormCount,
     wandb_logger: WandbLogger | None,
     epoch: int,
-    ema_model: torch.nn.Module,
+    ema_model: SimpleEMAModel,
     loss_fn: ReconstructionLoss,
     discriminator_optimizer: torch.optim.Optimizer,
     discriminator_loss_scaler: misc.NativeScalerWithGradNormCount,
@@ -204,19 +205,30 @@ def train_one_epoch_tokenizer(
     header = f"Epoch: [{epoch}]"
     logger.info(f"log dir: {args.log_dir}")
     start_time = time.perf_counter()
+    
+    # Add gradient accumulation variables
+    accum_steps = args.gradient_accumulation_steps if hasattr(args, 'gradient_accumulation_steps') else 1
+    accum_count = 0
+    
+    if accum_steps <= 0:
+        logger.warning(f"Gradient accumulation steps must be greater than 0, setting to 1")
+        accum_steps = 1
 
     for step, data_dict in enumerate(metric_logger.log_every(data_loader, args.print_freq, header)):
-        # calibrate 1 epoch = 1000 iterations regardless of batch size
+        # Calibrate 1 epoch = 1000 iterations regardless of batch size
         frac_epoch = step / steps_per_epoch + epoch  # fraction of the current epoch
         calib_global_step = int(frac_epoch * 1000)
         x = data_dict["img"]
 
-        optimizer.zero_grad(set_to_none=True)
-        discriminator_optimizer.zero_grad(set_to_none=True)
+        # Zero gradients only at the first step of accumulation
+        if accum_count == 0:
+            optimizer.zero_grad(set_to_none=True)
+            discriminator_optimizer.zero_grad(set_to_none=True)
 
-        # Adjust learning rates
-        misc.adjust_learning_rate(optimizer, frac_epoch, args)
-        misc.adjust_learning_rate(discriminator_optimizer, frac_epoch, args)
+        # Adjust learning rates - only adjust at the beginning of accumulation
+        if accum_count == 0:
+            misc.adjust_learning_rate(optimizer, frac_epoch, args)
+            misc.adjust_learning_rate(discriminator_optimizer, frac_epoch, args)
 
         # Forward pass and generator loss
         with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -247,6 +259,9 @@ def train_one_epoch_tokenizer(
                 pred_aux_features=pred_aux_features,
                 mode="generator",
             )
+            
+            # Divide loss by accumulation steps to average gradients
+            ae_loss = ae_loss / accum_steps
 
             # Process loss dictionary
             autoencoder_logs = {}
@@ -259,16 +274,26 @@ def train_one_epoch_tokenizer(
             loss = ae_loss
             loss_dict.update(autoencoder_logs)
 
-        # backward pass for generator
-        grad_norm = loss_scaler(loss, optimizer, args.grad_clip, model.parameters())
+        # Backward pass for generator - accumulate gradients but only update at the last step
+        is_last_accum_step = (accum_count == accum_steps - 1)
+        grad_norm = loss_scaler(
+            loss, 
+            optimizer, 
+            args.grad_clip, 
+            model.parameters(),
+            update_grad=is_last_accum_step
+        )
+        
+        accum_count += 1
+        
+        # Update EMA model and reset counter if accumulation is complete
+        if is_last_accum_step:
+            ema_model.step(model)
+            accum_count = 0
 
-        # update ema model
-        ema_model.step(model)
-
-        # train discriminator if needed
+        # Train discriminator if needed
         discriminator_logs = {}
         if epoch >= args.discriminator_start_epoch:
-            # this loss module assumes that both x and reconstructed are in [0, 1]
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 discriminator_loss, loss_dict_discriminator = loss_fn(
                     inputs=targets, 
@@ -276,6 +301,9 @@ def train_one_epoch_tokenizer(
                     epoch=epoch,
                     mode="discriminator",
                 )
+                
+                # Divide discriminator loss by accumulation steps
+                discriminator_loss = discriminator_loss / accum_steps
 
             # Gather the losses across all processes for logging
             for k, v in loss_dict_discriminator.items():
@@ -291,20 +319,84 @@ def train_one_epoch_tokenizer(
                 discriminator_optimizer,
                 args.grad_clip,
                 loss_fn.parameters(),
+                update_grad=is_last_accum_step  # Sync with generator update
             )
         else:
             discriminator_grad_norm = 0.0
 
-        # Synchronize and log metrics
+        # Only synchronize and log metrics at the end of accumulation
+        if is_last_accum_step:
+            # Synchronize and log metrics
+            torch.cuda.synchronize()
+            loss_dict_reduced = {k: dist.all_reduce_mean(v) for k, v in loss_dict.items()}
+            loss_dict_reduced.pop("total_loss", None)
+            total_loss_reduced = sum(loss for k, loss in loss_dict_reduced.items() if "loss" in k)
+
+            # Update metrics
+            effective_batch_size = args.batch_size * accum_steps
+            samples_per_second_per_gpu = effective_batch_size * (step + 1) / (time.perf_counter() - start_time)
+            samples_per_second = samples_per_second_per_gpu * args.world_size
+
+            metric_logger.update(
+                loss=total_loss_reduced,
+                grad_norm=grad_norm,
+                discriminator_grad_norm=discriminator_grad_norm,
+                lr=optimizer.param_groups[0]["lr"],
+                **loss_dict_reduced,
+                **{"samples/s/gpu": samples_per_second_per_gpu, "samples/s": samples_per_second},
+            )
+
+            # Log to wandb
+            if wandb_logger is not None and step % args.print_freq == 0:
+                log_dict = {
+                    "loss": total_loss_reduced,
+                    **loss_dict_reduced,
+                    "lr": optimizer.param_groups[0]["lr"],
+                    "grad_norm": grad_norm,
+                    "discriminator_grad_norm": discriminator_grad_norm,
+                    "samples_per_sec_per_gpu": samples_per_second_per_gpu,
+                    "samples_per_sec": samples_per_second,
+                }
+                wandb_logger.update(log_dict, step=calib_global_step)
+
+    # Handle the last incomplete accumulation batch
+    if accum_count > 0:
+        # For generator
+        loss_scaler._scaler.unscale_(optimizer)
+        if args.grad_clip is not None and args.grad_clip > 0.0:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+        else:
+            grad_norm = misc.get_grad_norm_(model.parameters())
+        
+        # Force update model parameters
+        loss_scaler._scaler.step(optimizer)
+        loss_scaler._scaler.update()
+        
+        if epoch >= args.discriminator_start_epoch:
+            discriminator_loss_scaler._scaler.unscale_(discriminator_optimizer)
+            if args.grad_clip is not None and args.grad_clip > 0.0:
+                discriminator_grad_norm = torch.nn.utils.clip_grad_norm_(
+                    loss_fn.parameters(), args.grad_clip
+                )
+            else:
+                discriminator_grad_norm = misc.get_grad_norm_(loss_fn.parameters())
+                
+            # Force update discriminator parameters
+            discriminator_loss_scaler._scaler.step(discriminator_optimizer)
+            discriminator_loss_scaler._scaler.update()
+            
+        ema_model.step(model)
+        
+        # Synchronize and log the last update
         torch.cuda.synchronize()
         loss_dict_reduced = {k: dist.all_reduce_mean(v) for k, v in loss_dict.items()}
         loss_dict_reduced.pop("total_loss", None)
         total_loss_reduced = sum(loss for k, loss in loss_dict_reduced.items() if "loss" in k)
-
-        # Update metrics
-        samples_per_second_per_gpu = args.batch_size * (step + 1) / (time.perf_counter() - start_time)
+        
+        effective_batch_size = args.batch_size * accum_count
+        samples_per_second_per_gpu = effective_batch_size * (step + 1) / (time.perf_counter() - start_time)
         samples_per_second = samples_per_second_per_gpu * args.world_size
-
+        
         metric_logger.update(
             loss=total_loss_reduced,
             grad_norm=grad_norm,
@@ -313,19 +405,6 @@ def train_one_epoch_tokenizer(
             **loss_dict_reduced,
             **{"samples/s/gpu": samples_per_second_per_gpu, "samples/s": samples_per_second},
         )
-
-        # Log to writer
-        if wandb_logger is not None and step % args.print_freq == 0:
-            log_dict = {
-                "loss": total_loss_reduced,
-                **loss_dict_reduced,
-                "lr": optimizer.param_groups[0]["lr"],
-                "grad_norm": grad_norm,
-                "discriminator_grad_norm": discriminator_grad_norm,
-                "samples_per_sec_per_gpu": samples_per_second_per_gpu,
-                "samples_per_sec": samples_per_second,
-            }
-            wandb_logger.update(log_dict, step=calib_global_step)
 
     metric_logger.synchronize_between_processes()
     logger.info(f"Averaged stats: {metric_logger}")
