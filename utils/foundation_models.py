@@ -1,7 +1,9 @@
 import os
 import logging
+
 import torch
 import timm
+from transformers import AutoImageProcessor, AutoModel
 
 logger = logging.getLogger("DeTok")
 
@@ -22,7 +24,25 @@ def create_foundation_model(model_type: str = "dinov2"):
             logger.info(f"[Foundation Model] Loaded foundation model DINOv2 from {ckpt_path}")            
         else:
             foundation_model = timm.create_model("vit_large_patch14_dinov2.lvd142m", pretrained=True, dynamic_img_size=True, img_size=224)
-            logger.info(f"[Foundation Model] Loaded foundation model DINOv2 from timodmm")
+            logger.info(f"[Foundation Model] Loaded foundation model DINOv2 from timm")
+
+    elif model_type == "dinov3":
+        ckpt_path = os.path.join("offline_models", "dinov3_vit_large_patch14")
+
+        if os.path.exists(ckpt_path):
+            transforms = AutoImageProcessor.from_pretrained(ckpt_path)
+            foundation_model = AutoModel.from_pretrained(
+                ckpt_path, 
+            )
+            logger.info(f"[Foundation Model] Loaded foundation model DINOv3 from {ckpt_path}")
+        else:
+            transforms = AutoImageProcessor.from_pretrained("facebook/dinov3-vitl16-pretrain-lvd1689m")
+            foundation_model = AutoModel.from_pretrained(
+                "facebook/dinov3-vitl16-pretrain-lvd1689m", 
+            )
+            logger.info(f"[Foundation Model] Loaded foundation model DINOv3 from transformers")
+
+        return foundation_model, transforms
 
     elif model_type == "clip":
         ckpt_path = os.path.join("offline_models", "clip_vit_large_patch14", "pytorch_model.bin")

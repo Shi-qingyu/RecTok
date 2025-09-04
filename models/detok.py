@@ -579,6 +579,21 @@ class DeTok(nn.Module):
                     token_channels=aux_token_channels,
                     aux_embed_dim=aux_foundation_model.num_features,
                 )
+
+            if "dinov3" in aux_model_type:
+                aux_foundation_model, transforms = create_foundation_model("dinov3")
+                aux_foundation_model.eval()
+                aux_foundation_model.requires_grad_(False)
+                self.aux_foundation_models["dinov3"] = aux_foundation_model
+                self.aux_foundation_models_transforms["dinov3"] = transforms
+                
+                self.aux_decoders["dinov3"] = AuxiliaryDecoder(
+                    img_size=img_size,
+                    patch_size=patch_size,
+                    model_size=vit_aux_model_size,
+                    token_channels=aux_token_channels,
+                    aux_embed_dim=aux_foundation_model.config.hidden_size,
+                )
             
             if "siglip" in aux_model_type:
                 aux_foundation_model, transforms = create_foundation_model("siglip")
@@ -727,13 +742,35 @@ class DeTok(nn.Module):
                     x_dino = transforms(x_aux)
                     x_dino = F.interpolate(x_dino, size=(224, 224), mode='bilinear', align_corners=False)
                     x_dino = x_dino.to(dtype=x.dtype)
-                    aux_features.append(aux_foundation_model.forward_features(x_dino)[:, 1:])   # [B, 256, dim]
+                    with torch.inference_mode():
+                        aux_feature = aux_foundation_model.forward_features(x_dino)[:, 1:]   # [B, 256, dim]
+
+                    aux_features.append(aux_feature)   # [B, 256, dim]
+                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
+
+                elif model_type == "dinov3":
+                    x_dinov3 = (x_aux * 255).to(torch.uint8)
+                    inputs = transforms(x_dinov3, return_tensors="pt").to(x.device)
+                    inputs["pixel_values"] = F.interpolate(
+                        inputs["pixel_values"], 
+                        size=(256, 256), 
+                        mode="bilinear", 
+                        align_corners=False
+                    )
+                    with torch.inference_mode():
+                        aux_feature = aux_foundation_model(**inputs).last_hidden_state
+                        
+                    aux_feature = aux_feature[:, 1 + aux_foundation_model.config.num_register_tokens:, :]
+                    aux_features.append(aux_feature)   # [B, 256, dim]
                     pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
 
                 elif model_type == "siglip":
                     x_siglip = transforms(x_aux)
                     x_siglip = x_siglip.to(dtype=x.dtype)
-                    aux_features.append(aux_foundation_model.forward_features(x_siglip))   # [B, 256, dim]
+                    with torch.inference_mode():
+                        aux_feature = aux_foundation_model.forward_features(x_siglip)   # [B, 256, dim]
+
+                    aux_features.append(aux_feature)   # [B, 256, dim]
                     pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
 
                 else:
