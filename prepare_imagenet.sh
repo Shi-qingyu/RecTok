@@ -12,11 +12,7 @@ huggingface-cli download QingyuShi/ImageNet1K --local-dir ./data/imagenet/ --rep
 cd data/imagenet/
 unzip val.zip
 
-set -Eeuo pipefail
-cd "train"
-
-# Make *.zip expand to empty when no matches; also treat .ZIP the same as .zip
-shopt -s nullglob nocaseglob
+cd train
 
 # Collect zips (non-recursive)
 zips=( *.zip )
