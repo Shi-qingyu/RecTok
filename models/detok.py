@@ -497,7 +497,7 @@ class DeTok(nn.Module):
         super().__init__()
 
         # initialize encoder and decoder
-        if pretrained_model_name_or_path is not None:
+        if pretrained_model_name_or_path is not None and pretrained_model_name_or_path != "":
             self.encoder = DINOv3Encoder(
                 pretrained_model_name_or_path=pretrained_model_name_or_path,
                 frozen_dinov3=frozen_dinov3,

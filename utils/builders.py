@@ -281,7 +281,7 @@ def create_reconstruction_model(args):
             mask_ratio=args.mask_ratio,
             gamma=args.gamma,
             pretrained_model_name_or_path=args.pretrained_model_name_or_path if hasattr(args, "pretrained_model_name_or_path") else None,
-            frozen_dinov3=args.frozen_dinov3 if hasattr(args, "frozen_dinov3") else True,
+            frozen_dinov3=args.frozen_dinov3 if hasattr(args, "frozen_dinov3") else False,
             random_mask_ratio=args.random_mask_ratio if hasattr(args, "random_mask_ratio") else True,
             vf_model_type=args.vf_model_type if hasattr(args, "vf_model_type") else "",
             aux_model_type=args.aux_model_type if hasattr(args, "aux_model_type") else "",
