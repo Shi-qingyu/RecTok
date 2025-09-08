@@ -559,9 +559,7 @@ class DeTok(nn.Module):
             if use_second_last_feature:
                 aux_token_channels = self.width
             elif use_adaptive_channels:
-                num_aux_models = len(aux_model_type.split(","))
-                assert token_channels % num_aux_models == 0, f"token_channels {token_channels} must be divisible by the number of auxiliary models {num_aux_models}"
-                aux_token_channels = self.token_channels // num_aux_models
+                aux_token_channels = self.token_channels // 2
             else:
                 aux_token_channels = self.token_channels
 
@@ -731,8 +729,7 @@ class DeTok(nn.Module):
                 aux_decoder = self.aux_decoders[model_type]
 
                 if self.use_adaptive_channels:
-                    chunk_dim = z_latents.size(-1) // len(self.aux_foundation_models)
-                    aux_z_latents = z_latents[:, :, i * chunk_dim: (i + 1) * chunk_dim]
+                    aux_z_latents = z_latents[:, :, :aux_decoder.token_channels]
                 elif self.use_second_last_feature:
                     aux_z_latents = second_last_feature
                 else:
