@@ -159,6 +159,7 @@ def get_args_parser():
     parser.add_argument("--vf_model_type", default="", type=str)
     
     parser.add_argument("--aux_model_type", default="", type=str)
+    parser.add_argument("--aux_dec_type", default="transformer", type=str)
     parser.add_argument("--vit_aux_model_size", default="tiny", type=str)
     parser.add_argument("--use_adaptive_channels", action="store_true")
     parser.add_argument("--use_second_last_feature", action="store_true")

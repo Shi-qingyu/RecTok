@@ -285,6 +285,7 @@ def create_reconstruction_model(args):
             random_mask_ratio=args.random_mask_ratio if hasattr(args, "random_mask_ratio") else True,
             vf_model_type=args.vf_model_type if hasattr(args, "vf_model_type") else "",
             aux_model_type=args.aux_model_type if hasattr(args, "aux_model_type") else "",
+            aux_dec_type=args.aux_dec_type if hasattr(args, "aux_dec_type") else "transformer",
             use_adaptive_channels=args.use_adaptive_channels if hasattr(args, "use_adaptive_channels") else False,
             use_second_last_feature=args.use_second_last_feature if hasattr(args, "use_second_last_feature") else False,
             vit_aux_model_size=args.vit_aux_model_size if hasattr(args, "vit_aux_model_size") else "tiny",

@@ -382,7 +382,7 @@ class Decoder(nn.Module):
 # ================================
 
 
-class AuxiliaryDecoder(nn.Module):
+class TransformerDecoder(nn.Module):
     """auxiliary decoder for training the model."""
     
     def __init__(
@@ -392,6 +392,7 @@ class AuxiliaryDecoder(nn.Module):
         model_size: str = "base", 
         token_channels: int = 16,
         aux_embed_dim: int = 1024,
+        **kwargs,
     ):
         super().__init__()
         self.img_size = img_size
@@ -457,6 +458,57 @@ class AuxiliaryDecoder(nn.Module):
         z = self.ln_post(z)
         
         return self.out(z)
+    
+
+# ================================
+# MLP Decoder
+# ================================
+
+
+class MLPDecoder(nn.Module):
+    """auxiliary decoder for training the model."""
+    
+    def __init__(
+        self, 
+        token_channels: int = 16,
+        aux_embed_dim: int = 1024,
+        **kwargs,
+    ):
+        super().__init__()
+        self.token_channels = token_channels
+        self.aux_embed_dim = aux_embed_dim
+        
+        
+        # token embedding
+        self.token_embedding = nn.Linear(self.token_channels, self.aux_embed_dim)
+        
+        # mask embedding
+        self.mask_embedding = nn.Parameter(torch.zeros(1, 1, self.aux_embed_dim))
+        
+        self.mlp = nn.Sequential(
+            nn.Linear(self.aux_embed_dim, 4 * self.aux_embed_dim),
+            nn.GELU(),
+            nn.Linear(4 * self.aux_embed_dim, self.aux_embed_dim),
+        )
+
+        params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
+        logger.info(f"[DeTok-AuxiliaryDecoder] params: {params_M:.2f}M")
+    
+    def forward(self, z_latents: Tensor, ids_restore: Tensor | None = None):
+        """forward pass through auxiliary decoder."""
+        z = self.token_embedding(z_latents)
+        bsz, seq_len, _ = z.shape
+
+        if ids_restore is not None:
+            num_mask_tokens = ids_restore.shape[1] + 1 - seq_len
+            mask_tokens = self.mask_embedding.repeat(bsz, num_mask_tokens, 1)
+            z_ = torch.cat([z, mask_tokens], dim=1)
+            expanded_ids_restore = ids_restore.unsqueeze(-1).expand(-1, -1, z_.shape[-1])
+            z = torch.gather(z_, dim=1, index=expanded_ids_restore)
+        
+        z = self.mlp(z)
+        
+        return z
 
 
 # ================================
@@ -485,6 +537,7 @@ class DeTok(nn.Module):
         use_second_last_feature: bool = False,
         vf_model_type: str = "",
         aux_model_type: str = "",
+        aux_dec_type: str = "transformer",
         mask_ratio: float = 0.75,
         random_mask_ratio: bool = True,
         gamma: float = 3.0,
@@ -552,6 +605,8 @@ class DeTok(nn.Module):
         self.use_aux = False
         if aux_model_type != "":
             self.use_aux = True
+            aux_dec = AuxiliaryDecoder_models[aux_dec_type]
+            
             self.aux_foundation_models = nn.ModuleDict()
             self.aux_foundation_models_transforms = dict()
             self.aux_decoders = nn.ModuleDict()
@@ -570,7 +625,7 @@ class DeTok(nn.Module):
                 self.aux_foundation_models["dinov2"] = aux_foundation_model
                 self.aux_foundation_models_transforms["dinov2"] = transforms
                 
-                self.aux_decoders["dinov2"] = AuxiliaryDecoder(
+                self.aux_decoders["dinov2"] = aux_dec(
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
@@ -585,7 +640,7 @@ class DeTok(nn.Module):
                 self.aux_foundation_models["dinov3"] = aux_foundation_model
                 self.aux_foundation_models_transforms["dinov3"] = transforms
                 
-                self.aux_decoders["dinov3"] = AuxiliaryDecoder(
+                self.aux_decoders["dinov3"] = aux_dec(
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
@@ -600,7 +655,7 @@ class DeTok(nn.Module):
                 self.aux_foundation_models["sam"] = aux_foundation_model
                 self.aux_foundation_models_transforms["sam"] = transforms
                 
-                self.aux_decoders["sam"] = AuxiliaryDecoder(
+                self.aux_decoders["sam"] = aux_dec(
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
@@ -615,7 +670,7 @@ class DeTok(nn.Module):
                 self.aux_foundation_models["radio"] = aux_foundation_model
                 self.aux_foundation_models_transforms["radio"] = transforms
                 
-                self.aux_decoders["radio"] = AuxiliaryDecoder(
+                self.aux_decoders["radio"] = aux_dec(
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
@@ -630,7 +685,7 @@ class DeTok(nn.Module):
                 self.aux_foundation_models["siglip"] = aux_foundation_model
                 self.aux_foundation_models_transforms["siglip"] = transforms
                 
-                self.aux_decoders["siglip"] = AuxiliaryDecoder(
+                self.aux_decoders["siglip"] = aux_dec(
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
@@ -946,4 +1001,9 @@ DeTok_models = {
     "detok_LB": detok_LB,
     "detok_LL": detok_LL,
     "detok_XLXL": detok_XLXL,
+}
+
+AuxiliaryDecoder_models = {
+    "transformer": TransformerDecoder,
+    "mlp": MLPDecoder,
 }
