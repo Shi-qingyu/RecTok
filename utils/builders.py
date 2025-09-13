@@ -138,7 +138,6 @@ def create_generation_model(args):
                 token_channels=args.token_channels,
                 gamma=0.0,
                 mask_ratio=0.0,
-                use_second_last_feature=args.use_second_last_feature if hasattr(args, "use_second_last_feature") else False,
                 pretrained_model_name_or_path=args.pretrained_model_name_or_path if hasattr(args, "pretrained_model_name_or_path") else None,
             )
         elif args.tokenizer in models.DeAE_models:
@@ -191,7 +190,7 @@ def create_generation_model(args):
             img_size=args.img_size,
             patch_size=args.patch_size,
             tokenizer_patch_size=args.tokenizer_patch_size,
-            token_channels=args.token_channels if not args.use_second_last_feature else tokenizer.width,
+            token_channels=args.token_channels,
             label_drop_prob=args.label_drop_prob,
             num_classes=args.num_classes,
             num_sampling_steps=args.num_sampling_steps,
@@ -286,8 +285,8 @@ def create_reconstruction_model(args):
             vf_model_type=args.vf_model_type if hasattr(args, "vf_model_type") else "",
             aux_model_type=args.aux_model_type if hasattr(args, "aux_model_type") else "",
             aux_dec_type=args.aux_dec_type if hasattr(args, "aux_dec_type") else "transformer",
+            aux_target=args.aux_target if hasattr(args, "aux_target") else "reconstruction",
             use_adaptive_channels=args.use_adaptive_channels if hasattr(args, "use_adaptive_channels") else False,
-            use_second_last_feature=args.use_second_last_feature if hasattr(args, "use_second_last_feature") else False,
             vit_aux_model_size=args.vit_aux_model_size if hasattr(args, "vit_aux_model_size") else "tiny",
         )
     elif args.model in models.DeAE_models:

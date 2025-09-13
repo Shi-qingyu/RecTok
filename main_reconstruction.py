@@ -162,7 +162,7 @@ def get_args_parser():
     parser.add_argument("--aux_dec_type", default="transformer", type=str)
     parser.add_argument("--vit_aux_model_size", default="tiny", type=str)
     parser.add_argument("--use_adaptive_channels", action="store_true")
-    parser.add_argument("--use_second_last_feature", action="store_true")
+    parser.add_argument("--aux_target", default="reconstruction", type=str, choices=["reconstruction", "align"])
 
     parser.add_argument("--no_load_ckpt", action="store_true")
     parser.add_argument("--train_decoder_only", action="store_true")

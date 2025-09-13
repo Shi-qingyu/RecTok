@@ -198,7 +198,7 @@ class Encoder(nn.Module):
         if self.mask_ratio == 0 or not self.training:
             # no masking
             rope = self.rope_tensor.expand(bsz, -1, -1)
-            return x, torch.zeros(bsz, seq_len, device=x.device), None, rope, None
+            return x, torch.zeros(bsz, seq_len, device=x.device), None, rope, None, None
 
         if self.random_mask_ratio:
             mask_ratio = max(0.0, random.uniform(-0.1, self.mask_ratio))
@@ -208,9 +208,10 @@ class Encoder(nn.Module):
         len_keep = int(np.ceil(seq_len * (1 - mask_ratio)))
         noise = torch.rand(bsz, seq_len, device=x.device)
         ids_shuffle = torch.argsort(noise, dim=1)
-        # ids_restore[:, i] = j means ith token in the original sequence ranks jth in the shuffled sequence
+        # ids_restore[:, i] = j means ith token in the image ranks jth in the shuffled sequence: ids_shuffle
         ids_restore = torch.argsort(ids_shuffle, dim=1) # [bsz, seq_len]
         ids_keep = ids_shuffle[:, :len_keep] # [bsz, len_keep]
+        ids_masked = ids_shuffle[:, len_keep:] # [bsz, seq_len - len_keep]
         x_visible = torch.gather(x, 1, ids_keep[..., None].repeat(1, 1, chans)) # x_visible[i, j, k] = x[i, ids_keep[i, j, k], k]
         rope = self.rope_tensor.expand(bsz, -1, -1) # [bsz, seq_len, head_dim]
         rope_visible = torch.gather(rope, 1, ids_keep[..., None].repeat(1, 1, rope.shape[-1]))
@@ -219,23 +220,21 @@ class Encoder(nn.Module):
         mask[:, :len_keep] = 0
         # ids_restore[:, i] >= len_keep means ith token in the original sequence is masked
         mask = torch.gather(mask, dim=1, index=ids_restore) # mask[i, j] = mask[i, ids_restore[i, j]]
-        return x_visible, mask, ids_restore, rope_visible, ids_keep
+        return x_visible, mask, ids_restore, rope_visible, ids_keep, ids_masked
 
     def forward(self, x: Tensor):
         """forward pass through encoder."""
         x = self.patch_embed(x) + self.positional_embedding
-        x, _, ids_restore, rope, ids_keep = self.mae_random_masking(x)
+        x, _, ids_restore, rope, ids_keep, ids_masked = self.mae_random_masking(x)
 
         x = self.ln_pre(x)
         for block in self.transformer:
             x = block(x, rope)
-        second_last_feature = x.clone()
-        
         x = self.ln_post(x)
 
         tokens = self.latent_head(x)
 
-        return tokens, ids_restore, ids_keep, second_last_feature
+        return tokens, ids_restore, ids_keep, ids_masked
 
 
 class DINOv3Encoder(nn.Module):
@@ -292,12 +291,11 @@ class DINOv3Encoder(nn.Module):
             x = self.model(**inputs).last_hidden_state
             
         x = x[:, 1 + self.config.num_register_tokens:, :]
-        second_last_feature = x.clone()
         
         x = self.ln_post(x)
         tokens = self.latent_head(x)
 
-        return tokens, None, None, second_last_feature
+        return tokens, None, None, None
 
 
 class Decoder(nn.Module):
@@ -534,10 +532,10 @@ class DeTok(nn.Module):
         vit_aux_model_size: str = "tiny",
         token_channels: int = 16,
         use_adaptive_channels: bool = False,
-        use_second_last_feature: bool = False,
         vf_model_type: str = "",
         aux_model_type: str = "",
         aux_dec_type: str = "transformer",
+        aux_target: str = "reconstruction",
         mask_ratio: float = 0.75,
         random_mask_ratio: bool = True,
         gamma: float = 3.0,
@@ -546,6 +544,7 @@ class DeTok(nn.Module):
         mean=0.0,
         std=1.0,
         scale_factor: float = 1.0,
+        **kwargs,
     ) -> None:
         super().__init__()
 
@@ -583,7 +582,7 @@ class DeTok(nn.Module):
         self.vf_model_type = vf_model_type
         self.aux_model_type = aux_model_type
         self.use_adaptive_channels = use_adaptive_channels
-        self.use_second_last_feature = use_second_last_feature
+        self.aux_target = aux_target
         
         # initialize weights
         self.apply(self._init_weights)
@@ -611,9 +610,7 @@ class DeTok(nn.Module):
             self.aux_foundation_models_transforms = dict()
             self.aux_decoders = nn.ModuleDict()
 
-            if use_second_last_feature:
-                aux_token_channels = self.width
-            elif use_adaptive_channels:
+            if use_adaptive_channels:
                 aux_token_channels = self.token_channels // 2
             else:
                 aux_token_channels = self.token_channels
@@ -762,7 +759,7 @@ class DeTok(nn.Module):
 
     def encode(self, x: Tensor, sampling: bool = False, noise_level: float = -1.0):
         """encode image into latent tokens."""
-        z, ids_restore, ids_keep, second_last_feature = self.encoder(x)
+        z, ids_restore, ids_keep, ids_masked = self.encoder(x)
 
         posteriors = self.to_posteriors(z)
         z_latents = posteriors.sample() if sampling else posteriors.mean
@@ -781,11 +778,11 @@ class DeTok(nn.Module):
             else:
                 z_latents = (1 - noise_level_tensor) * z_latents + noise_level_tensor * noise
 
-        return z_latents, posteriors, ids_restore, ids_keep, second_last_feature
+        return z_latents, posteriors, ids_restore, ids_keep, ids_masked
 
     def forward(self, x: Tensor):
         """forward pass through the entire model."""
-        z_latents, posteriors, ids_restore, ids_keep, second_last_feature = self.encode(x, sampling=self.training)
+        z_latents, posteriors, ids_restore, ids_keep, ids_masked = self.encode(x, sampling=self.training)
 
         if self.use_vf and self.training:
             if self.vf_model_type == "dinov2":
@@ -815,8 +812,6 @@ class DeTok(nn.Module):
 
                 if self.use_adaptive_channels:
                     aux_z_latents = z_latents[:, :, :aux_decoder.token_channels]
-                elif self.use_second_last_feature:
-                    aux_z_latents = second_last_feature
                 else:
                     aux_z_latents = z_latents
 
@@ -826,9 +821,6 @@ class DeTok(nn.Module):
                     x_dino = x_dino.to(dtype=x.dtype)
                     with torch.inference_mode():
                         aux_feature = aux_foundation_model.forward_features(x_dino)[:, 1:]   # [B, 256, dim]
-
-                    aux_features.append(aux_feature)   # [B, 256, dim]
-                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
 
                 elif model_type == "dinov3":
                     x_dinov3 = (x_aux * 255).to(torch.uint8)
@@ -841,10 +833,7 @@ class DeTok(nn.Module):
                     )
                     with torch.inference_mode():
                         aux_feature = aux_foundation_model(**inputs).last_hidden_state
-                        
                     aux_feature = aux_feature[:, 1 + aux_foundation_model.config.num_register_tokens:, :]
-                    aux_features.append(aux_feature)   # [B, 256, dim]
-                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
 
                 elif model_type == "sam":
                     x_sam = transforms(
@@ -865,8 +854,6 @@ class DeTok(nn.Module):
                     aux_feature = aux_feature.last_hidden_state
                     B, C, H, W = aux_feature.shape
                     aux_feature = aux_feature.permute(0, 2, 3, 1).reshape(B, H * W, C).contiguous()
-                    aux_features.append(aux_feature)   # [B, 256, dim]
-                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
 
                 elif model_type == "radio":
                     x_radio = x_aux
@@ -874,21 +861,25 @@ class DeTok(nn.Module):
                     with torch.inference_mode():
                         _, aux_feature = aux_foundation_model(x_radio)   # [B, 256, dim]
 
-                    aux_features.append(aux_feature)   # [B, 256, dim]
-                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
-
                 elif model_type == "siglip":
                     x_siglip = transforms(x_aux)
                     x_siglip = x_siglip.to(dtype=x.dtype)
                     with torch.inference_mode():
                         aux_feature = aux_foundation_model.forward_features(x_siglip)   # [B, 256, dim]
 
-                    aux_features.append(aux_feature)   # [B, 256, dim]
-                    pred_aux_features.append(aux_decoder(aux_z_latents, ids_restore=ids_restore))
-
                 else:
                     raise ValueError(f"Unknown foundation model type: {model_type}")
                 
+                pred_aux_feature = aux_decoder(aux_z_latents, ids_restore=ids_restore)
+                
+                if self.aux_target == "reconstruction" and ids_masked.shape[1] > 0:
+                    expanded_ids_masked = ids_masked.unsqueeze(-1).expand(-1, -1, aux_feature.shape[-1])
+                    aux_feature = torch.gather(aux_feature, dim=1, index=expanded_ids_masked)
+                    pred_aux_feature = torch.gather(pred_aux_feature, dim=1, index=expanded_ids_masked)
+                
+                aux_features.append(aux_feature)
+                pred_aux_features.append(pred_aux_feature)
+
         else:
             aux_features = None
             pred_aux_features = None
@@ -908,25 +899,15 @@ class DeTok(nn.Module):
 
     def tokenize(self, x: Tensor, sampling: bool = False) -> Tensor:
         """tokenize input image and normalize the latent tokens."""
-        if not self.use_second_last_feature:
-            z = self.encode(x, sampling=sampling)[0]
-            z = self.normalize_z(z)
-        else:
-            z = self.encode(x, sampling=sampling)[-1]
-            z = self.normalize_z(z)
+        z = self.encode(x, sampling=sampling)[0]
+        z = self.normalize_z(z)
         return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
 
     def detokenize(self, z: Tensor) -> Tensor:
         """detokenize latent representation back to image."""
         z = rearrange(z, "b c h w -> b (h w) c")
         z = self.denormalize_z(z)
-        if not self.use_second_last_feature:
-            decoded_images = self.decoder(z)
-        else:
-            z = self.encoder.ln_post(z)
-            z = self.encoder.latent_head(z)
-            z = self.to_posteriors(z).mean
-            decoded_images = self.decoder(z)
+        decoded_images = self.decoder(z)
         return torch.clamp(decoded_images * 0.5 + 0.5, 0.0, 1.0)
 
     def sample_from_moments(self, moments: Tensor) -> Tensor:
