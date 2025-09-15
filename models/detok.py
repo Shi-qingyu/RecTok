@@ -232,7 +232,115 @@ class Encoder(nn.Module):
             x = block(x, rope)
         x = self.ln_post(x)
 
-        tokens = self.latent_head(x)
+        tokens = self.latent_head(x)    # [bsz, seq_len, token_channels]
+
+        return tokens, ids_restore, ids_keep, ids_masked
+    
+    
+class PostMaskEncoder(nn.Module):
+    """vision Transformer encoder with masked autoencoding capability."""
+
+    def __init__(
+        self,
+        img_size: int = 256,
+        patch_size: int = 16,
+        model_size: str = "base",
+        token_channels: int = 16,
+        mask_ratio: float = 0.75,
+        random_mask_ratio: bool = True,
+    ) -> None:
+        super().__init__()
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.grid_size = self.img_size // self.patch_size
+        self.model_size = model_size
+        # needs to split into mean and std
+        self.token_channels = token_channels * 2
+        self.mask_ratio = mask_ratio
+        self.random_mask_ratio = random_mask_ratio
+        self.seq_len = self.grid_size**2
+
+        size_dict = SIZE_DICT[self.model_size]
+        num_layers, num_heads, width = size_dict["layers"], size_dict["heads"], size_dict["width"]
+        self.width = width
+
+        # patch embedding layer
+        self.patch_embed = nn.Sequential(
+            nn.Conv2d(3, width, self.patch_size, self.patch_size),
+            Rearrange("b c h w -> b (h w) c", h=self.grid_size, w=self.grid_size),
+        )
+
+        # learnable embeddings
+        scale = width ** -0.5
+        self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.seq_len, width))
+
+        # transformer layers
+        norm_layer = partial(nn.RMSNorm, eps=1e-6)
+        self.ln_pre = norm_layer(width)
+        self.transformer = nn.ModuleList(
+            [Block(dim=width, num_heads=num_heads, norm_layer=norm_layer) for _ in range(num_layers)]
+        )
+        self.ln_post = norm_layer(width)
+        self.latent_head = nn.Linear(width, self.token_channels)
+
+        # rotary position embedding
+        head_dim = self.transformer[0].attn.head_dim
+        rope_tensor = get_rope_tensor(head_dim, self.grid_size, self.grid_size).unsqueeze(0)
+        self.register_buffer("rope_tensor", rope_tensor, persistent=False)
+
+        params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
+        logger.info(f"[DeTok-Encoder] params: {params_M:.2f}M, {model_size}-{num_layers}-{width}")
+
+    def unpatchify(self, x: Tensor, chans: int, patch_size: int) -> Tensor:
+        """convert patches back to image format."""
+        bsz = x.shape[0]
+        h_ = w_ = self.grid_size
+        x = x.reshape(bsz, h_, w_, chans, patch_size, patch_size)
+        x = torch.einsum("nhwcpq->nchpwq", x)
+        x = x.reshape(bsz, chans, h_ * patch_size, w_ * patch_size)
+        return x
+
+    def mae_random_masking(self, x: Tensor):
+        """apply masked autoencoding random masking."""
+        bsz, seq_len, chans = x.shape
+        # mask: 0 for visible, 1 for masked
+        if self.mask_ratio == 0 or not self.training:
+            # no masking
+            return x, torch.zeros(bsz, seq_len, device=x.device), None, None, None
+
+        if self.random_mask_ratio:
+            mask_ratio = max(0.0, random.uniform(-0.1, self.mask_ratio))
+        else:
+            mask_ratio = self.mask_ratio
+
+        len_keep = int(np.ceil(seq_len * (1 - mask_ratio)))
+        noise = torch.rand(bsz, seq_len, device=x.device)
+        ids_shuffle = torch.argsort(noise, dim=1)
+        # ids_restore[:, i] = j means ith token in the image ranks jth in the shuffled sequence: ids_shuffle
+        ids_restore = torch.argsort(ids_shuffle, dim=1) # [bsz, seq_len]
+        ids_keep = ids_shuffle[:, :len_keep] # [bsz, len_keep]
+        ids_masked = ids_shuffle[:, len_keep:] # [bsz, seq_len - len_keep]
+        x_visible = torch.gather(x, 1, ids_keep[..., None].repeat(1, 1, chans)) # x_visible[i, j, k] = x[i, ids_keep[i, j, k], k]
+
+        mask = torch.ones(bsz, seq_len, device=x.device)
+        mask[:, :len_keep] = 0
+        # ids_restore[:, i] >= len_keep means ith token in the original sequence is masked
+        mask = torch.gather(mask, dim=1, index=ids_restore) # mask[i, j] = mask[i, ids_restore[i, j]]
+        return x_visible, mask, ids_restore, ids_keep, ids_masked
+
+    def forward(self, x: Tensor):
+        """forward pass through encoder."""
+        x = self.patch_embed(x) + self.positional_embedding
+        bsz = x.shape[0]
+        rope = self.rope_tensor.expand(bsz, -1, -1)
+
+        x = self.ln_pre(x)
+        for block in self.transformer:
+            x = block(x, rope)
+        x = self.ln_post(x)
+
+        tokens = self.latent_head(x)    # [bsz, seq_len, token_channels]
+        tokens, mask, ids_restore, ids_keep, ids_masked = self.mae_random_masking(tokens)
 
         return tokens, ids_restore, ids_keep, ids_masked
 
@@ -536,7 +644,7 @@ class DeTok(nn.Module):
         aux_model_type: str = "",
         aux_dec_type: str = "transformer",
         aux_target: str = "reconstruction",
-        mask_ratio: float = 0.75,
+        mask_ratio: float = 0.7,
         random_mask_ratio: bool = True,
         gamma: float = 3.0,
         use_additive_noise: bool = False,
@@ -549,12 +657,21 @@ class DeTok(nn.Module):
         super().__init__()
 
         # initialize encoder and decoder
-        if pretrained_model_name_or_path is not None and pretrained_model_name_or_path != "":
+        if "dinov3" in pretrained_model_name_or_path:
             self.encoder = DINOv3Encoder(
                 pretrained_model_name_or_path=pretrained_model_name_or_path,
                 frozen_dinov3=frozen_dinov3,
                 img_size=img_size,
                 token_channels=token_channels,
+            )
+        elif "postmask" in pretrained_model_name_or_path:
+            self.encoder = PostMaskEncoder(
+                img_size=img_size,
+                patch_size=patch_size,
+                model_size=vit_enc_model_size,
+                token_channels=token_channels,
+                mask_ratio=mask_ratio,
+                random_mask_ratio=random_mask_ratio,
             )
         else:
             self.encoder = Encoder(
@@ -872,10 +989,14 @@ class DeTok(nn.Module):
                 
                 pred_aux_feature = aux_decoder(aux_z_latents, ids_restore=ids_restore)
                 
-                if self.aux_target == "reconstruction" and ids_masked.shape[1] > 0:
-                    expanded_ids_masked = ids_masked.unsqueeze(-1).expand(-1, -1, aux_feature.shape[-1])
-                    aux_feature = torch.gather(aux_feature, dim=1, index=expanded_ids_masked)
-                    pred_aux_feature = torch.gather(pred_aux_feature, dim=1, index=expanded_ids_masked)
+                if self.aux_target == "reconstruction":
+                    if ids_masked.shape[1] > 0:
+                        expanded_ids_masked = ids_masked.unsqueeze(-1).expand(-1, -1, aux_feature.shape[-1])
+                        aux_feature = torch.gather(aux_feature, dim=1, index=expanded_ids_masked)
+                        pred_aux_feature = torch.gather(pred_aux_feature, dim=1, index=expanded_ids_masked)
+                    else:
+                        # do not update aux_decoder, use pseudo loss
+                        pred_aux_feature = aux_feature.clone() + pred_aux_feature * 0
                 
                 aux_features.append(aux_feature)
                 pred_aux_features.append(pred_aux_feature)
