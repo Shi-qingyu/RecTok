@@ -1017,10 +1017,8 @@ def collect_tokenizer_stats(
             # moments is a concatenation of mean and std, so the channel dimension is doubled
             #########################################################
             
-            if tokenizer.use_second_last_feature:
-                moments = tokenizer.encode(samples)[-1]
-            else:
-                moments = tokenizer.encode_into_posteriors(samples)
+
+            moments = tokenizer.encode_into_posteriors(samples)
             if hasattr(moments, "parameters"):
                 moments = moments.parameters
         elif hasattr(tokenizer, "encode"):
@@ -1059,11 +1057,8 @@ def collect_tokenizer_stats(
                 channel_count += moments.size(0) * moments.size(2) * moments.size(3)
 
             else:  # chan_dim == 2, [B, seq_len, C]
-                if tokenizer.use_second_last_feature:
-                    relevant_moments = moments
-                else:
-                    num_channels = moments.size(-1) // 2
-                    relevant_moments = moments[..., :num_channels]
+                num_channels = moments.size(-1) // 2
+                relevant_moments = moments[..., :num_channels]
                 
                 # overall stats
                 total_sum += relevant_moments.sum()

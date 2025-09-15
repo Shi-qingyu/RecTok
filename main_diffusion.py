@@ -63,7 +63,7 @@ def main(args: argparse.Namespace) -> int:
         )
         # update tokenizer with computed statistics
         mean, std = result_dict["channel"]
-        if mean.ndim > 0 and hasattr(tokenizer, "encode_into_posteriors") and not tokenizer.use_second_last_feature:
+        if mean.ndim > 0 and hasattr(tokenizer, "encode_into_posteriors"):
             n_chans = len(mean) // 2
             mean, std = mean[:n_chans], std[:n_chans]
         tokenizer.reset_stats(mean, std)
@@ -213,7 +213,6 @@ def get_args_parser():
     parser.add_argument("--token_channels", default=16, type=int)
     parser.add_argument("--tokenizer_patch_size", default=16, type=int)
     parser.add_argument("--use_ema_tokenizer", action="store_true")
-    parser.add_argument("--use_second_last_feature", action="store_true")
 
     # tokenizer cache parameters
     parser.add_argument("--collect_tokenizer_stats", action="store_true")
