@@ -10,7 +10,7 @@ aux_target="reconstruction"
 
 epochs=200
 discriminator_start_epoch=100
-gamma=0.3
+gamma=3.0
 mask_ratio=0.5
 mask_ratio_type="fix"
 
