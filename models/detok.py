@@ -180,7 +180,7 @@ class Encoder(nn.Module):
         self.register_buffer("rope_tensor", rope_tensor, persistent=False)
 
         params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
-        logger.info(f"[DeTok-Encoder] params: {params_M:.2f}M, {model_size}-{num_layers}-{width}")
+        logger.info(f"[DeTok-Encoder] params: {params_M:.2f}M, {model_size}-{num_layers}-{width}, random mask ratio: {self.random_mask_ratio}")
 
     def unpatchify(self, x: Tensor, chans: int, patch_size: int) -> Tensor:
         """convert patches back to image format."""
@@ -289,7 +289,7 @@ class PostMaskEncoder(nn.Module):
         self.register_buffer("rope_tensor", rope_tensor, persistent=False)
 
         params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
-        logger.info(f"[DeTok-Encoder] params: {params_M:.2f}M, {model_size}-{num_layers}-{width}")
+        logger.info(f"[DeTok-Encoder] params: {params_M:.2f}M, {model_size}-{num_layers}-{width}, random mask ratio: {self.random_mask_ratio}")
 
     def unpatchify(self, x: Tensor, chans: int, patch_size: int) -> Tensor:
         """convert patches back to image format."""
@@ -584,17 +584,13 @@ class MLPDecoder(nn.Module):
         self.token_channels = token_channels
         self.aux_embed_dim = aux_embed_dim
         
-        
-        # token embedding
-        self.token_embedding = nn.Linear(self.token_channels, self.aux_embed_dim)
-        
         # mask embedding
-        self.mask_embedding = nn.Parameter(torch.zeros(1, 1, self.aux_embed_dim))
+        self.mask_embedding = nn.Parameter(torch.zeros(1, 1, self.token_channels))
         
         self.mlp = nn.Sequential(
-            nn.Linear(self.aux_embed_dim, 4 * self.aux_embed_dim),
+            nn.Linear(self.token_channels, 2 * self.aux_embed_dim),
             nn.GELU(),
-            nn.Linear(4 * self.aux_embed_dim, self.aux_embed_dim),
+            nn.Linear(2 * self.aux_embed_dim, self.aux_embed_dim),
         )
 
         params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
@@ -602,19 +598,15 @@ class MLPDecoder(nn.Module):
     
     def forward(self, z_latents: Tensor, ids_restore: Tensor | None = None):
         """forward pass through auxiliary decoder."""
-        z = self.token_embedding(z_latents)
-        bsz, seq_len, _ = z.shape
-
+        bsz, seq_len, token_channels = z_latents.shape
         if ids_restore is not None:
             num_mask_tokens = ids_restore.shape[1] + 1 - seq_len
             mask_tokens = self.mask_embedding.repeat(bsz, num_mask_tokens, 1)
-            z_ = torch.cat([z, mask_tokens], dim=1)
-            expanded_ids_restore = ids_restore.unsqueeze(-1).expand(-1, -1, z_.shape[-1])
-            z = torch.gather(z_, dim=1, index=expanded_ids_restore)
+            z_latents = torch.cat([z_latents, mask_tokens], dim=1)
+            expanded_ids_restore = ids_restore.unsqueeze(-1).expand(-1, -1, token_channels)
+            z_latents = torch.gather(z_latents, dim=1, index=expanded_ids_restore)
         
-        z = self.mlp(z)
-        
-        return z
+        return self.mlp(z_latents)
 
 
 # ================================
@@ -645,7 +637,7 @@ class DeTok(nn.Module):
         aux_dec_type: str = "transformer",
         aux_target: str = "reconstruction",
         mask_ratio: float = 0.7,
-        random_mask_ratio: bool = True,
+        mask_ratio_type: str = "random",
         gamma: float = 3.0,
         use_additive_noise: bool = False,
         # normalization parameters used for generative model training
@@ -671,7 +663,7 @@ class DeTok(nn.Module):
                 model_size=vit_enc_model_size,
                 token_channels=token_channels,
                 mask_ratio=mask_ratio,
-                random_mask_ratio=random_mask_ratio,
+                random_mask_ratio=mask_ratio_type.lower() == "random",
             )
         else:
             self.encoder = Encoder(
@@ -680,7 +672,7 @@ class DeTok(nn.Module):
                 model_size=vit_enc_model_size,
                 token_channels=token_channels,
                 mask_ratio=mask_ratio,
-                random_mask_ratio=random_mask_ratio,
+                random_mask_ratio=mask_ratio_type.lower() == "random",
             )
         self.decoder = Decoder(
             img_size=img_size,
