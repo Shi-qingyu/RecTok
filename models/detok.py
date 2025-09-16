@@ -138,6 +138,7 @@ class Encoder(nn.Module):
         model_size: str = "base",
         token_channels: int = 16,
         mask_ratio: float = 0.75,
+        mask_ratio_min: float = -0.1,
         random_mask_ratio: bool = True,
     ) -> None:
         super().__init__()
@@ -148,6 +149,7 @@ class Encoder(nn.Module):
         # needs to split into mean and std
         self.token_channels = token_channels * 2
         self.mask_ratio = mask_ratio
+        self.mask_ratio_min = mask_ratio_min
         self.random_mask_ratio = random_mask_ratio
         self.seq_len = self.grid_size**2
 
@@ -201,7 +203,7 @@ class Encoder(nn.Module):
             return x, torch.zeros(bsz, seq_len, device=x.device), None, rope, None, None
 
         if self.random_mask_ratio:
-            mask_ratio = max(0.0, random.uniform(-0.1, self.mask_ratio))
+            mask_ratio = max(0.0, random.uniform(self.mask_ratio_min, self.mask_ratio))
         else:
             mask_ratio = self.mask_ratio
 
@@ -247,6 +249,7 @@ class PostMaskEncoder(nn.Module):
         model_size: str = "base",
         token_channels: int = 16,
         mask_ratio: float = 0.75,
+        mask_ratio_min: float = -0.1,
         random_mask_ratio: bool = True,
     ) -> None:
         super().__init__()
@@ -257,6 +260,7 @@ class PostMaskEncoder(nn.Module):
         # needs to split into mean and std
         self.token_channels = token_channels * 2
         self.mask_ratio = mask_ratio
+        self.mask_ratio_min = mask_ratio_min
         self.random_mask_ratio = random_mask_ratio
         self.seq_len = self.grid_size**2
 
@@ -309,7 +313,7 @@ class PostMaskEncoder(nn.Module):
             return x, torch.zeros(bsz, seq_len, device=x.device), None, None, None
 
         if self.random_mask_ratio:
-            mask_ratio = max(0.0, random.uniform(-0.1, self.mask_ratio))
+            mask_ratio = max(0.0, random.uniform(self.mask_ratio_min, self.mask_ratio))
         else:
             mask_ratio = self.mask_ratio
 
@@ -637,6 +641,7 @@ class DeTok(nn.Module):
         aux_dec_type: str = "transformer",
         aux_target: str = "reconstruction",
         mask_ratio: float = 0.7,
+        mask_ratio_min: float = -0.1,
         mask_ratio_type: str = "random",
         gamma: float = 3.0,
         use_additive_noise: bool = False,
@@ -663,6 +668,7 @@ class DeTok(nn.Module):
                 model_size=vit_enc_model_size,
                 token_channels=token_channels,
                 mask_ratio=mask_ratio,
+                mask_ratio_min=mask_ratio_min,
                 random_mask_ratio=mask_ratio_type.lower() == "random",
             )
         else:
@@ -672,6 +678,7 @@ class DeTok(nn.Module):
                 model_size=vit_enc_model_size,
                 token_channels=token_channels,
                 mask_ratio=mask_ratio,
+                mask_ratio_min=mask_ratio_min,
                 random_mask_ratio=mask_ratio_type.lower() == "random",
             )
         self.decoder = Decoder(
