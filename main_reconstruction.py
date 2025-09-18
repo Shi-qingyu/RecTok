@@ -170,6 +170,7 @@ def get_args_parser():
     parser.add_argument("--vis_only", action="store_true")
 
     # loss parameters
+    parser.add_argument("--reconstruction_weight", default=1.0, type=float)
     parser.add_argument("--perceptual_loss", type=str, default="lpips-convnext_s-1.0-0.1")
     parser.add_argument("--perceptual_weight", default=1.0, type=float)
     parser.add_argument("--discriminator_start_epoch", default=20, type=int)

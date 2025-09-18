@@ -138,7 +138,7 @@ def create_generation_model(args):
                 token_channels=args.token_channels,
                 gamma=0.0,
                 mask_ratio=0.0,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path if hasattr(args, "pretrained_model_name_or_path") else None,
+                pretrained_model_name_or_path=getattr(args, "pretrained_model_name_or_path", ""),
             )
         elif args.tokenizer in models.DeAE_models:
             tokenizer: nn.Module = models.DeAE_models[args.tokenizer](
@@ -278,17 +278,17 @@ def create_reconstruction_model(args):
             patch_size=args.patch_size,
             token_channels=args.token_channels,
             mask_ratio=args.mask_ratio,
-            mask_ratio_min=args.mask_ratio_min if hasattr(args, "mask_ratio_min") else -0.1,
             gamma=args.gamma,
-            pretrained_model_name_or_path=args.pretrained_model_name_or_path if hasattr(args, "pretrained_model_name_or_path") else None,
-            frozen_dinov3=args.frozen_dinov3 if hasattr(args, "frozen_dinov3") else False,
-            mask_ratio_type=args.mask_ratio_type if hasattr(args, "mask_ratio_type") else "random",
-            vf_model_type=args.vf_model_type if hasattr(args, "vf_model_type") else "",
-            aux_model_type=args.aux_model_type if hasattr(args, "aux_model_type") else "",
-            aux_dec_type=args.aux_dec_type if hasattr(args, "aux_dec_type") else "transformer",
-            aux_target=args.aux_target if hasattr(args, "aux_target") else "reconstruction",
-            use_adaptive_channels=args.use_adaptive_channels if hasattr(args, "use_adaptive_channels") else False,
-            vit_aux_model_size=args.vit_aux_model_size if hasattr(args, "vit_aux_model_size") else "tiny",
+            mask_ratio_min=getattr(args, "mask_ratio_min", -0.1),
+            pretrained_model_name_or_path=getattr(args, "pretrained_model_name_or_path", ""),
+            frozen_dinov3=getattr(args, "frozen_dinov3", False),
+            mask_ratio_type=getattr(args, "mask_ratio_type", "random"),
+            vf_model_type=getattr(args, "vf_model_type", ""),
+            aux_model_type=getattr(args, "aux_model_type", ""),
+            aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
+            aux_target=getattr(args, "aux_target", "reconstruction"),
+            use_adaptive_channels=getattr(args, "use_adaptive_channels", False),
+            vit_aux_model_size=getattr(args, "vit_aux_model_size", "tiny"),
         )
     elif args.model in models.DeAE_models:
         model = models.DeAE_models[args.model](
@@ -358,6 +358,7 @@ def create_optimizer_and_scaler(args, model, print_trainable_params=False):
 
 def create_loss_module(args):
     loss_module = losses.ReconstructionLoss(
+        reconstruction_weight=getattr(args, "reconstruction_weight", 1.0),
         discriminator_start_epoch=getattr(args, "discriminator_start_epoch", 20),
         perceptual_loss=getattr(args, "perceptual_loss", "lpips-convnext_s-1.0-0.1"),
         perceptual_weight=getattr(args, "perceptual_weight", 1.1),

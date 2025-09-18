@@ -746,9 +746,9 @@ class MLPDecoder(nn.Module):
         self.mask_embedding = nn.Parameter(torch.zeros(1, 1, self.token_channels))
         
         self.mlp = nn.Sequential(
-            nn.Linear(self.token_channels, 2 * self.aux_embed_dim),
+            nn.Linear(self.token_channels, 4 * self.aux_embed_dim),
             nn.GELU(),
-            nn.Linear(2 * self.aux_embed_dim, self.aux_embed_dim),
+            nn.Linear(4 * self.aux_embed_dim, self.aux_embed_dim),
         )
 
         params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
@@ -970,6 +970,15 @@ class DeTok(nn.Module):
                     aux_embed_dim=aux_foundation_model.num_features,
                 )
 
+            if "pixel" in aux_model_type:
+                self.aux_decoders["pixel"] = aux_dec(
+                    img_size=img_size,
+                    patch_size=patch_size,
+                    model_size=vit_aux_model_size,
+                    token_channels=aux_token_channels,
+                    aux_embed_dim=3,
+                )
+
         # setup to-posteriors function
         self.to_posteriors = partial(DiagonalGaussianDistribution, channel_dim=-1)
 
@@ -1175,6 +1184,9 @@ class DeTok(nn.Module):
                     x_siglip = x_siglip.to(dtype=x.dtype)
                     with torch.inference_mode():
                         aux_feature = aux_foundation_model.forward_features(x_siglip)   # [B, 256, dim]
+                
+                elif model_type == "pixel":
+                    aux_feature = x_aux
 
                 else:
                     raise ValueError(f"Unknown foundation model type: {model_type}")

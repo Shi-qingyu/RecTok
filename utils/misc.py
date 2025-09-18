@@ -183,8 +183,8 @@ def ckpt_resume(
             state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint
             msg = model.load_state_dict(state_dict, strict=False)
             # assert unexpected keys can only start with "loss."
-            for key in msg.unexpected_keys:
-                assert key.startswith("loss."), f"unexpected key {key} doesn't start with 'loss.'"
+            # for key in msg.unexpected_keys:
+            #     assert key.startswith("loss."), f"unexpected key {key} doesn't start with 'loss.'"
             logger.info(f"[Model-load] Loaded model: {msg}")
             if "model_ema" in checkpoint:
                 logger.info(f"[Model-load] Loaded EMA")

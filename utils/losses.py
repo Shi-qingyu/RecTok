@@ -380,7 +380,7 @@ class AuxLoss(nn.Module):
         super().__init__()
         self.aux_loss_type = aux_loss_type
 
-    def forward(self, aux_feature, pred_aux_feature):
+    def forward(self, aux_feature, pred_aux_feature):            
         if self.aux_loss_type == "l2":
             aux_loss = F.mse_loss(aux_feature, pred_aux_feature, reduction="mean")
         elif self.aux_loss_type == "l1":
