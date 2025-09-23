@@ -140,6 +140,8 @@ class Encoder(nn.Module):
         mask_ratio: float = 0.75,
         mask_ratio_min: float = -0.1,
         random_mask_ratio: bool = True,
+        use_skip_connection: bool = False,
+        last_layer_feature: bool = False,
     ) -> None:
         super().__init__()
         self.img_size = img_size
@@ -151,8 +153,10 @@ class Encoder(nn.Module):
         self.mask_ratio = mask_ratio
         self.mask_ratio_min = mask_ratio_min
         self.random_mask_ratio = random_mask_ratio
-        self.seq_len = self.grid_size**2
-
+        self.seq_len = self.grid_size ** 2
+        self.use_skip_connection = use_skip_connection
+        self.last_layer_feature = last_layer_feature
+        
         size_dict = SIZE_DICT[self.model_size]
         num_layers, num_heads, width = size_dict["layers"], size_dict["heads"], size_dict["width"]
         self.width = width
@@ -226,18 +230,34 @@ class Encoder(nn.Module):
 
     def forward(self, x: Tensor):
         """forward pass through encoder."""
-        x = self.patch_embed(x) + self.positional_embedding
+        if self.use_skip_connection:
+            x_skip = x
+            x_skip = F.pixel_unshuffle(x_skip, self.patch_size)
+            x_skip = x_skip.flatten(2).transpose(1, 2) # [bsz, seq_len, chans]
+            num_chunks = x_skip.shape[-1] // self.width
+            assert num_chunks * self.width == x_skip.shape[-1], f"num_chunks * width != chans, got {num_chunks} and {self.width}"
+            x_skip = x_skip.unflatten(-1, (self.width, num_chunks)).mean(dim=-1)
+            x = self.patch_embed(x) + self.positional_embedding + x_skip
+        else:
+            x = self.patch_embed(x) + self.positional_embedding
+            
         x, _, ids_restore, rope, ids_keep, ids_masked = self.mae_random_masking(x)
 
         x = self.ln_pre(x)
         for block in self.transformer:
             x = block(x, rope)
         x = self.ln_post(x)
+        
+        if self.last_layer_feature:
+            z_aux = x
+        else:
+            z_aux = None    # use posterior(z) for auxiliary decoder
 
         z = self.latent_head(x)    # [bsz, seq_len, token_channels]
     
         ret = dict(
             z=z,
+            z_aux=z_aux,
             ids_restore=ids_restore,
             ids_keep=ids_keep,
             ids_masked=ids_masked,
@@ -358,11 +378,11 @@ class DualEncoder(nn.Module):
             x_visible = self.ln_post(x_visible)
             
             if self.last_layer_feature:
-                z_visible = x_visible
+                z_aux = x_visible
             else:
-                z_visible = self.latent_head(x_visible)    # [bsz, visible_seq_len, token_channels]
+                z_aux = self.latent_head(x_visible)    # [bsz, visible_seq_len, token_channels]
         else:
-            z_visible = None
+            z_aux = None
             ids_restore = None
             ids_keep = None
             ids_masked = None
@@ -379,7 +399,7 @@ class DualEncoder(nn.Module):
         
         ret = dict(
             z=z,
-            z_visible=z_visible,
+            z_aux=z_aux,
             ids_restore=ids_restore,
             ids_keep=ids_keep,
             ids_masked=ids_masked,
@@ -497,6 +517,7 @@ class PostMaskEncoder(nn.Module):
         
         ret = dict(
             z=z,
+            z_aux=None,
             ids_restore=ids_restore,
             ids_keep=ids_keep,
             ids_masked=ids_masked,
@@ -748,9 +769,6 @@ class MLPDecoder(nn.Module):
         self.token_channels = token_channels
         self.aux_embed_dim = aux_embed_dim
         
-        # mask embedding
-        self.mask_embedding = nn.Parameter(torch.zeros(1, 1, self.token_channels))
-        
         self.mlp = nn.Sequential(
             nn.Linear(self.token_channels, 4 * self.aux_embed_dim),
             nn.GELU(),
@@ -762,14 +780,6 @@ class MLPDecoder(nn.Module):
     
     def forward(self, z_latents: Tensor, ids_restore: Tensor | None = None):
         """forward pass through auxiliary decoder."""
-        bsz, seq_len, token_channels = z_latents.shape
-        if ids_restore is not None:
-            num_mask_tokens = ids_restore.shape[1] + 1 - seq_len
-            mask_tokens = self.mask_embedding.repeat(bsz, num_mask_tokens, 1)
-            z_latents = torch.cat([z_latents, mask_tokens], dim=1)
-            expanded_ids_restore = ids_restore.unsqueeze(-1).expand(-1, -1, token_channels)
-            z_latents = torch.gather(z_latents, dim=1, index=expanded_ids_restore)
-        
         return self.mlp(z_latents)
 
 
@@ -796,7 +806,7 @@ class DeTok(nn.Module):
         vit_aux_model_size: str = "tiny",
         token_channels: int = 16,
         use_adaptive_channels: bool = False,
-        last_layer_feature: bool = True,
+        last_layer_feature: bool = False,
         vf_model_type: str = "",
         aux_model_type: str = "",
         aux_dec_type: str = "transformer",
@@ -804,6 +814,7 @@ class DeTok(nn.Module):
         mask_ratio: float = 0.7,
         mask_ratio_min: float = -0.1,
         mask_ratio_type: str = "random",
+        use_skip_connection: bool = False,
         gamma: float = 3.0,
         use_additive_noise: bool = False,
         # normalization parameters used for generative model training
@@ -852,6 +863,8 @@ class DeTok(nn.Module):
                 mask_ratio=mask_ratio,
                 mask_ratio_min=mask_ratio_min,
                 random_mask_ratio=mask_ratio_type.lower() == "random",
+                use_skip_connection=use_skip_connection,
+                last_layer_feature=last_layer_feature,
             )
         self.decoder = Decoder(
             img_size=img_size,
@@ -862,6 +875,7 @@ class DeTok(nn.Module):
 
         # model configuration
         self.seq_h = img_size // patch_size
+        self.seq_w = self.seq_h
         self.width = self.encoder.width
         self.token_channels = token_channels
         self.use_additive_noise = use_additive_noise
@@ -900,7 +914,7 @@ class DeTok(nn.Module):
 
             if use_adaptive_channels:
                 aux_token_channels = self.token_channels // 2
-            elif pretrained_model_name_or_path == "dual" and last_layer_feature:
+            elif last_layer_feature:
                 aux_token_channels = self.width
             else:
                 aux_token_channels = self.token_channels
@@ -1067,15 +1081,15 @@ class DeTok(nn.Module):
         posteriors = self.to_posteriors(z)
         z_latents = posteriors.sample() if sampling else posteriors.mean
         
-        if isinstance(self.encoder, DualEncoder) and self.training:
+        if isinstance(self.encoder, DualEncoder):
             if self.encoder.last_layer_feature:
-                z_latents_visiable = ret["z_visible"]
+                z_latents_aux = ret["z_aux"]
             else:
-                z_visiable = ret["z_visible"]
-                posteriors_visiable = self.to_posteriors(z_visiable)
-                z_latents_visiable = posteriors_visiable.sample() if sampling else posteriors_visiable.mean
+                z_aux = ret["z_aux"]
+                posteriors_aux = self.to_posteriors(z_aux)
+                z_latents_aux = posteriors_aux.sample() if sampling else posteriors_aux.mean
         else:
-            z_latents_visiable = None
+            z_latents_aux = ret["z_aux"] if ret["z_aux"] is not None else z_latents
 
         if self.training and self.gamma > 0.0:
             device = z_latents.device
@@ -1093,7 +1107,7 @@ class DeTok(nn.Module):
 
         ret = dict(
             z_latents=z_latents,
-            z_latents_visiable=z_latents_visiable,
+            z_latents_aux=z_latents_aux,
             posteriors=posteriors,
             ids_restore=ids_restore,
             ids_keep=ids_keep,
@@ -1106,27 +1120,11 @@ class DeTok(nn.Module):
         """forward pass through the entire model."""
         ret = self.encode(x, sampling=self.training)
         z_latents = ret["z_latents"]
-        z_latents_visiable = ret["z_latents_visiable"]
+        z_latents_aux = ret["z_latents_aux"]
         posteriors = ret["posteriors"]
         ids_restore = ret["ids_restore"]
         ids_keep = ret["ids_keep"]
         ids_masked = ret["ids_masked"]
-
-        if self.use_vf and self.training:
-            if self.vf_model_type == "dinov2":
-                x_ = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
-            else:
-                raise ValueError(f"Unknown foundation model type: {self.vf_model_type}")
-
-            vf_feature = self.foundation_model.forward_features(x_)[:, 1:]   # [B, 256, dim]
-            
-            if ids_keep is not None:
-                expanded_ids_keep = ids_keep.unsqueeze(-1).expand(-1, -1, vf_feature.shape[-1])
-                vf_feature = torch.gather(vf_feature, dim=1, index=expanded_ids_keep)
-            
-            vf_feature = self.linear_proj(vf_feature)
-        else:
-            vf_feature = None
 
         if self.use_aux and self.training:
             x_aux = (x + 1) * 0.5
@@ -1138,13 +1136,8 @@ class DeTok(nn.Module):
                 transforms = self.aux_foundation_models_transforms[model_type]
                 aux_decoder = self.aux_decoders[model_type]
 
-                if isinstance(self.encoder, DualEncoder):
-                    aux_z_latents = z_latents_visiable
-                else:
-                    aux_z_latents = z_latents
-
                 if self.use_adaptive_channels:
-                    aux_z_latents = aux_z_latents[:, :, :aux_z_latents.shape[-1] // 2]
+                    z_latents_aux = z_latents_aux[:, :, :z_latents_aux.shape[-1] // 2]
 
                 if model_type == "dinov2":
                     x_dino = transforms(x_aux)
@@ -1204,8 +1197,15 @@ class DeTok(nn.Module):
                 else:
                     raise ValueError(f"Unknown foundation model type: {model_type}")
                 
-                pred_aux_feature = aux_decoder(aux_z_latents, ids_restore=ids_restore)
+                pred_aux_feature = aux_decoder(z_latents_aux, ids_restore=ids_restore)
                 
+                if aux_feature.shape[1] != pred_aux_feature.shape[1]:
+                    bsz, seq_len, dim = aux_feature.shape
+                    aux_feature_h = int(seq_len ** 0.5)
+                    aux_feature = aux_feature.reshape(bsz, aux_feature_h, aux_feature_h, dim).permute(0, 3, 1, 2)
+                    aux_feature = F.interpolate(aux_feature, size=(self.seq_h, self.seq_w), mode='bilinear', align_corners=False)
+                    aux_feature = aux_feature.permute(0, 2, 3, 1).reshape(bsz, self.seq_h * self.seq_w, dim)
+
                 if self.aux_target == "reconstruction":
                     if ids_masked.shape[1] > 0:
                         expanded_ids_masked = ids_masked.unsqueeze(-1).expand(-1, -1, aux_feature.shape[-1])
@@ -1223,7 +1223,7 @@ class DeTok(nn.Module):
             pred_aux_features = None
         
         if isinstance(self.encoder, DualEncoder):
-            decoded = self.decoder(z_latents, ids_restore=None)
+            decoded = self.decoder(z_latents[:z_latents.shape[0] // 4], ids_restore=None)
         else:
             decoded = self.decoder(z_latents, ids_restore=ids_restore)
 
@@ -1231,7 +1231,7 @@ class DeTok(nn.Module):
             posteriors=posteriors,
             z_latents=z_latents,
             ids_restore=ids_restore,
-            vf_feature=vf_feature,
+            vf_feature=None,
             aux_features=aux_features,
             pred_aux_features=pred_aux_features,
         )

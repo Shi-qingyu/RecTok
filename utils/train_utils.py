@@ -248,6 +248,10 @@ def train_one_epoch_tokenizer(
             # Normalize inputs to [0, 1] range for loss function
             targets = x * 0.5 + 0.5
             reconstructions = reconstructions * 0.5 + 0.5
+            
+            if reconstructions.shape[0] != targets.shape[0]:
+                targets = targets[:reconstructions.shape[0]]
+                
             ae_loss, loss_dict = loss_fn(
                 inputs=targets, 
                 reconstructions=reconstructions, 

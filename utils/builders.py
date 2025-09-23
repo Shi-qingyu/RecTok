@@ -139,6 +139,7 @@ def create_generation_model(args):
                 gamma=0.0,
                 mask_ratio=0.0,
                 pretrained_model_name_or_path=getattr(args, "pretrained_model_name_or_path", ""),
+                use_skip_connection=getattr(args, "use_skip_connection", False),
             )
         elif args.tokenizer in models.DeAE_models:
             tokenizer: nn.Module = models.DeAE_models[args.tokenizer](
@@ -283,11 +284,13 @@ def create_reconstruction_model(args):
             pretrained_model_name_or_path=getattr(args, "pretrained_model_name_or_path", ""),
             frozen_dinov3=getattr(args, "frozen_dinov3", False),
             mask_ratio_type=getattr(args, "mask_ratio_type", "random"),
+            use_skip_connection=getattr(args, "use_skip_connection", False),
             vf_model_type=getattr(args, "vf_model_type", ""),
             aux_model_type=getattr(args, "aux_model_type", ""),
             aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
             aux_target=getattr(args, "aux_target", "reconstruction"),
             use_adaptive_channels=getattr(args, "use_adaptive_channels", False),
+            last_layer_feature=getattr(args, "last_layer_feature", False),
             vit_aux_model_size=getattr(args, "vit_aux_model_size", "tiny"),
         )
     elif args.model in models.DeAE_models:
