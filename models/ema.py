@@ -62,7 +62,8 @@ class SimpleEMAModel:
         """load EMA state from state dict."""
         if isinstance(state_dict, dict):
             for name, param in self.ema_params.items():
-                param.data.copy_(state_dict[name].to(param.device).data)
+                if name in state_dict:
+                    param.data.copy_(state_dict[name].to(param.device).data)
         elif isinstance(state_dict, list):
             i = 0
             for name, param in self.ema_params.items():

@@ -288,6 +288,7 @@ def create_reconstruction_model(args):
             vf_model_type=getattr(args, "vf_model_type", ""),
             aux_model_type=getattr(args, "aux_model_type", ""),
             aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
+            aux_input_type=getattr(args, "aux_input_type", "noisy"),
             aux_target=getattr(args, "aux_target", "reconstruction"),
             use_adaptive_channels=getattr(args, "use_adaptive_channels", False),
             last_layer_feature=getattr(args, "last_layer_feature", False),

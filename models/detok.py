@@ -810,6 +810,7 @@ class DeTok(nn.Module):
         vf_model_type: str = "",
         aux_model_type: str = "",
         aux_dec_type: str = "transformer",
+        aux_input_type: str = "noisy",
         aux_target: str = "reconstruction",
         mask_ratio: float = 0.7,
         mask_ratio_min: float = -0.1,
@@ -884,6 +885,7 @@ class DeTok(nn.Module):
         self.vf_model_type = vf_model_type
         self.aux_model_type = aux_model_type
         self.use_adaptive_channels = use_adaptive_channels
+        self.aux_input_type = aux_input_type
         self.aux_target = aux_target
         
         # initialize weights
@@ -1118,10 +1120,10 @@ class DeTok(nn.Module):
             else:
                 z_latents = (1 - noise_level_tensor) * z_latents + noise_level_tensor * noise
                 
-            # if z_latents_aux is not None:
-            #     noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
-            #     noise_aux = torch.randn_like(z_latents_aux) * self.gamma
-            #     z_latents_aux = (1 - noise_level_tensor) * z_latents_aux + noise_level_tensor * noise_aux
+            if self.aux_input_type == "noisy":
+                noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
+                noise_aux = torch.randn_like(z_latents_aux) * self.gamma
+                z_latents_aux = (1 - noise_level_tensor) * z_latents_aux + noise_level_tensor * noise_aux
 
         ret = dict(
             z_latents=z_latents,
