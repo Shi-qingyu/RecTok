@@ -30,3 +30,15 @@ for z in "${zips[@]}"; do
 done
 
 echo "[done] All zips processed."
+
+cd ../../../
+
+# Download everything from huggingface
+huggingface-cli download jjiaweiyang/l-DeTok --local-dir released_model
+mv released_model/train.txt data/
+mv released_model/val.txt data/
+mv released_model/fid_stats data/
+mv released_model/imagenet-val-prc.zip ./data/
+
+# Unzip: imagenet-val-prc.zip for precision & recall evaluation
+python -m zipfile -e ./data/imagenet-val-prc.zip ./data/

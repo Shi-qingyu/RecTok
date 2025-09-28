@@ -12,22 +12,7 @@ pip install -r requirements.txt
 ### Dataset
 Download ImageNet1K through:
 ```bash
-bash prepare_imagenet.sh
-```
-
-### Download Required Files
-
-Create data directory and download required files:
-```bash
-# Download everything from huggingface
-huggingface-cli download jjiaweiyang/l-DeTok --local-dir released_model
-mv released_model/train.txt data/
-mv released_model/val.txt data/
-mv released_model/fid_stats data/
-mv released_model/imagenet-val-prc.zip ./data/
-
-# Unzip: imagenet-val-prc.zip for precision & recall evaluation
-python -m zipfile -e ./data/imagenet-val-prc.zip ./data/
+bash prepare_data.sh
 ```
 
 ### Data Organization
@@ -70,6 +55,48 @@ torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --maste
     --use_aux_decoder --aux_loss_weight 1.0 \
     --online_eval \
     --epochs 200 --discriminator_start_epoch 100 \
+    --data_path ./data/imagenet/train
+```
+
+Decoder fine-tuning:
+```bash
+project=tokenizer_training
+exp_name=detokBB-g3.0-m0.7-200ep-decoder_ft-100ep
+batch_size=64
+num_nodes=2
+pretrained_tok=work_dirs/tokenizer_training/detokBB-g3.0-m0.7-200ep/checkpoints/latest.pth
+
+torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
+    main_reconstruction.py \
+    --project $project --exp_name $exp_name --auto_resume \
+    --batch_size $batch_size --model detok_BB \
+    --load_from $pretrained_tok \
+    --online_eval --train_decoder_only \
+    --perceptual_weight 0.1 \
+    --gamma 0.0 --mask_ratio 0.0 \
+    --blr 5e-5 --warmup_rate 0.05 \
+    --epochs 100 --discriminator_start_epoch 0 \
+    --data_path ./data/imagenet/train
+```
+
+Latent head fine-tuning:
+```bash
+project=tokenizer_training
+exp_name=detokBB-ch32-g3.0-m-0.10.7random-auxdinov2transformeralign-head_ft
+batch_size=128
+num_nodes=1
+pretrained_tok=work_dirs/tokenizer_training/detokBB-ch32-g3.0-m-0.10.7random-auxdinov2transformeralign/checkpoints/epoch_0199.pth
+
+torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
+    main_reconstruction.py \
+    --project $project --exp_name $exp_name --auto_resume \
+    --batch_size $batch_size --model detok_BB \
+    --load_from $pretrained_tok \
+    --online_eval --train_latent_head_only \
+    --perceptual_weight 0.1 \
+    --gamma 0.0 --mask_ratio 0.0 \
+    --blr 5e-5 --warmup_rate 0.05 \
+    --epochs 100 --discriminator_start_epoch 0 \
     --data_path ./data/imagenet/train
 ```
 
