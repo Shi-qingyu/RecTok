@@ -110,7 +110,7 @@ def get_rope_tensor(
     num_special = (1 if add_cls else 0) + int(n_register)
     if num_special > 0:
         angle_special = torch.zeros(num_special, dim, device=device, dtype=dtype)
-        angle = torch.cat([angle_special, angle_grid], dim=0)  # (num_special+N, dim)
+        angle = torch.cat([angle_special, angle_grid], dim=0)  # (num_special + N, dim)
     else:
         angle = angle_grid
 
@@ -307,7 +307,7 @@ class Encoder(nn.Module):
             num_chunks = x_skip.shape[-1] // self.width
             assert num_chunks * self.width == x_skip.shape[-1], f"num_chunks * width != chans, got {num_chunks} and {self.width}"
             x_skip = x_skip.unflatten(-1, (self.width, num_chunks)).mean(dim=-1)
-            x = self.patch_embed(x) + self.positional_embedding + x_skip
+            x = self.patch_embed(x) + x_skip
         else:
             x = self.patch_embed(x)
         
@@ -681,7 +681,7 @@ class Decoder(nn.Module):
         patch_size: int = 16,
         model_size: str = "base",
         token_channels: int = 16,
-        aux_cls_token: bool = False,
+        diff_cls_token: bool = False,
         num_register_tokens: int = 0,
     ) -> None:
         super().__init__()
@@ -692,7 +692,7 @@ class Decoder(nn.Module):
         self.token_channels = token_channels
         self.seq_len = self.grid_size ** 2
         self.num_register_tokens = num_register_tokens
-        # self.aux_cls_token = aux_cls_token
+        self.diff_cls_token = diff_cls_token
         
         params = SIZE_DICT[self.model_size]
         num_layers, num_heads, width = params["layers"], params["heads"], params["width"]
@@ -700,10 +700,16 @@ class Decoder(nn.Module):
         # learnable embeddings
         scale = width ** -0.5
         if self.num_register_tokens > 0:
-            self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens + self.seq_len, width))
+            if self.diff_cls_token:
+                self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens + 1 + self.seq_len, width))
+            else:
+                self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens + self.seq_len, width))
             self.register_token_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens, width))
         else:
-            self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.seq_len, width))
+            if self.diff_cls_token:
+                self.positional_embedding = nn.Parameter(scale * torch.randn(1, 1 + self.seq_len, width))
+            else:
+                self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.seq_len, width))
         
         self.mask_token = nn.Parameter(scale * torch.randn(1, 1, width))
 
@@ -726,7 +732,13 @@ class Decoder(nn.Module):
 
         # rotary position embedding
         head_dim = self.transformer[0].attn.head_dim
-        rope_tensor = get_rope_tensor(head_dim, self.grid_size, self.grid_size, n_register=self.num_register_tokens).unsqueeze(0)
+        rope_tensor = get_rope_tensor(
+            head_dim, 
+            self.grid_size, 
+            self.grid_size, 
+            n_register=self.num_register_tokens, 
+            add_cls=self.diff_cls_token
+        ).unsqueeze(0)
         self.register_buffer("rope_tensor", rope_tensor, persistent=False)
 
         params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
@@ -734,6 +746,7 @@ class Decoder(nn.Module):
 
     def forward(self, z_latents: Tensor, ids_restore: Tensor | None = None) -> Tensor:
         """forward pass through decoder."""
+        # z_latents: [bsz, seq_len, token_channels] or [bsz, 1 + seq_len, token_channels] if diff_cls_token
         z = self.decoder_embed(z_latents)
         bsz, seq_len, _ = z.shape
 
@@ -757,6 +770,9 @@ class Decoder(nn.Module):
 
         if self.num_register_tokens > 0:
             z = z[:, self.num_register_tokens:]
+
+        if self.diff_cls_token:
+            z = z[:, 1:]
 
         z = self.ffn(z)  # embed -> patch
         z = self.conv_out(z)  # final 3x3 conv
@@ -901,7 +917,7 @@ class DeTok(nn.Module):
         img_size: int = 256,
         patch_size: int = 16,
         vit_enc_model_size: str = "small",
-        pretrained_model_name_or_path: Optional[str] = None,
+        pretrained_model_name_or_path: str = "",
         frozen_dinov3: bool = True,
         num_register_tokens: int = 0,
         vit_dec_model_size: str = "base",
@@ -912,6 +928,7 @@ class DeTok(nn.Module):
         vf_model_type: str = "",
         aux_model_type: str = "",
         aux_cls_token: bool = False,
+        diff_cls_token: bool = False,
         aux_dec_type: str = "transformer",
         aux_input_type: str = "noisy",
         aux_target: str = "reconstruction",
@@ -978,7 +995,7 @@ class DeTok(nn.Module):
             patch_size=patch_size,
             model_size=vit_dec_model_size,
             token_channels=token_channels,
-            aux_cls_token=aux_cls_token,
+            diff_cls_token=diff_cls_token,
             num_register_tokens=num_register_tokens,
         )
 
@@ -996,6 +1013,7 @@ class DeTok(nn.Module):
         self.aux_input_type = aux_input_type
         self.aux_target = aux_target
         self.aux_cls_token = aux_cls_token
+        self.diff_cls_token = diff_cls_token
         
         # initialize weights
         self.apply(self._init_weights)
@@ -1023,9 +1041,7 @@ class DeTok(nn.Module):
             self.aux_foundation_models_transforms = dict()
             self.aux_decoders = nn.ModuleDict()
 
-            if use_adaptive_channels:
-                aux_token_channels = self.token_channels // 2
-            elif last_layer_feature:
+            if last_layer_feature:
                 aux_token_channels = self.width
             else:
                 aux_token_channels = self.token_channels
@@ -1192,7 +1208,7 @@ class DeTok(nn.Module):
         """encode image into posterior distributions."""
         z = self.encoder(x)["z"]
         
-        if self.aux_cls_token:
+        if self.aux_cls_token and not self.diff_cls_token:
             z = z[:, 1:]
         
         return self.to_posteriors(z)
@@ -1240,7 +1256,7 @@ class DeTok(nn.Module):
                 noise_aux = torch.randn_like(z_latents_aux) * self.gamma
                 z_latents_aux = (1 - noise_level_tensor) * z_latents_aux + noise_level_tensor * noise_aux
 
-        if self.aux_cls_token:
+        if self.aux_cls_token and not self.diff_cls_token:
             z_latents = z_latents[:, 1:]
 
         ret = dict(
@@ -1363,7 +1379,7 @@ class DeTok(nn.Module):
         if isinstance(self.encoder, DualEncoder):
             decoded = self.decoder(z_latents[:z_latents.shape[0] // 4], ids_restore=None)
         else:
-            decoded = self.decoder(z_latents, ids_restore=ids_restore)
+            decoded = self.decoder(z_latents, ids_restore=ids_restore)  # [bsz, 3, img_size, img_size]
 
         result_dict = dict(
             posteriors=posteriors,
@@ -1381,11 +1397,16 @@ class DeTok(nn.Module):
         ret = self.encode(x, sampling=sampling)
         z = ret["z_latents"]
         z = self.normalize_z(z)
-        return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
+        if self.diff_cls_token:
+            return z
+        else:
+            return rearrange(z, "b (h w) c -> b c h w", h=self.seq_h)
 
     def detokenize(self, z: Tensor) -> Tensor:
         """detokenize latent representation back to image."""
-        z = rearrange(z, "b c h w -> b (h w) c")
+        if z.ndim == 4:
+            z = rearrange(z, "b c h w -> b (h w) c")
+
         z = self.denormalize_z(z)
         decoded_images = self.decoder(z)
         return torch.clamp(decoded_images * 0.5 + 0.5, 0.0, 1.0)

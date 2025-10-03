@@ -153,6 +153,7 @@ def get_args_parser():
     parser.add_argument("--pretrained_model_name_or_path", default="", type=str)
     parser.add_argument("--frozen_dinov3", action="store_true")
     parser.add_argument("--num_register_tokens", default=0, type=int)
+    parser.add_argument("--diff_cls_token", action="store_true")
 
     parser.add_argument("--mask_ratio", default=0.0, type=float)
     parser.add_argument("--mask_ratio_min", default=-0.1, type=float)
