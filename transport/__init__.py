@@ -12,6 +12,8 @@ def create_transport(
     loss_weight=None,
     train_eps=None,
     sample_eps=None,
+    diff_cls_token=False,
+    cls_weight=0.03,
     use_cosine_loss=False,
     use_lognorm=None,
     partitial_train=None,
@@ -73,6 +75,8 @@ def create_transport(
         partitial_train=partitial_train,
         partial_ratio=partial_ratio,
         shift_lg=shift_lg,
+        diff_cls_token=diff_cls_token,
+        cls_weight=cls_weight,
     )
 
     return state

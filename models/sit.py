@@ -48,7 +48,7 @@ class SiT(nn.Module):
         learn_sigma=False,  # no learn_sigma in SiT
         legacy_mode=False,
         qk_norm=False,
-        use_cls_token=False,
+        diff_cls_token=False,
     ):
         super().__init__()
 
@@ -63,7 +63,7 @@ class SiT(nn.Module):
         self.grad_checkpointing = grad_checkpointing
         self.learn_sigma = learn_sigma
         self.legacy_mode = legacy_mode
-        self.use_cls_token = use_cls_token
+        self.diff_cls_token = diff_cls_token
 
         # model architecture configuration
         size_dict = SIZE_DICT[model_size]
@@ -99,7 +99,10 @@ class SiT(nn.Module):
 
         # --------------------------------------------------------------------------
         # transport and sampling setup
-        self.transport = create_transport()
+        self.transport = create_transport(
+            diff_cls_token=self.diff_cls_token,
+            cls_weight=1e-3,
+        )
         self.sampler = Sampler(self.transport)
         self.sample_fn = self.sampler.sample_ode(
             sampling_method=sampling_method,

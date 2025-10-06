@@ -201,6 +201,7 @@ class Encoder(nn.Module):
         use_skip_connection: bool = False,
         last_layer_feature: bool = False,
         aux_cls_token: bool = False,
+        diff_cls_token: bool = False,
         num_register_tokens: int = 0,
     ) -> None:
         super().__init__()
@@ -217,6 +218,7 @@ class Encoder(nn.Module):
         self.use_skip_connection = use_skip_connection
         self.last_layer_feature = last_layer_feature
         self.aux_cls_token = aux_cls_token
+        self.diff_cls_token = diff_cls_token
         self.num_register_tokens = num_register_tokens
         size_dict = SIZE_DICT[self.model_size]
         num_layers, num_heads, width = size_dict["layers"], size_dict["heads"], size_dict["width"]
@@ -298,6 +300,31 @@ class Encoder(nn.Module):
         mask = torch.gather(mask, dim=1, index=ids_restore) # mask[i, j] = mask[i, ids_restore[i, j]]
         return x_visible, mask, ids_restore, rope_visible, ids_keep, ids_masked
 
+    def show_attention_map_last_layer(self, x: Tensor):
+        """show attention map of last layer."""
+        x = self.patch_embed(x)
+        if self.aux_cls_token:
+            x = torch.cat([self.aux_cls_token_embedding.expand(x.shape[0], -1, -1), x], dim=1)
+        if self.num_register_tokens > 0:
+            x = torch.cat([self.register_token_embedding.expand(x.shape[0], -1, -1), x], dim=1)
+
+        x = x + self.positional_embedding
+
+        x = self.ln_pre(x)
+        for block in self.transformer[:-1]:
+            x = block(x, self.rope_tensor.expand(x.shape[0], -1, -1))
+
+        last_block = self.transformer[-1]
+        x = last_block.norm1(x)
+        bsz, n_ctx, ch = x.shape
+        qkv = last_block.attn.qkv(x)
+        q, k, v = rearrange(qkv, "b n (qkv h d) -> qkv b h n d", qkv=3, h=last_block.attn.num_heads).unbind(0)  # [bsz, heads, seq_len, head_dim]
+        q, k = apply_rotary_emb(q, self.rope_tensor.expand(bsz, -1, -1)), apply_rotary_emb(k, self.rope_tensor.expand(bsz, -1, -1))
+        attn_map = (q @ k.transpose(-2, -1)) * last_block.attn.head_dim ** -0.5
+        attn_map = attn_map.softmax(dim=-1).mean(dim=1)
+        attn_map_cls = attn_map[:, self.num_register_tokens, 1 + self.num_register_tokens:]
+        return attn_map_cls
+
     def forward(self, x: Tensor):
         """forward pass through encoder."""
         if self.use_skip_connection:
@@ -335,6 +362,9 @@ class Encoder(nn.Module):
         if self.num_register_tokens > 0:
             z = z[:, self.num_register_tokens:]
             z_aux = z_aux[:, self.num_register_tokens:]
+
+        if self.aux_cls_token and not self.diff_cls_token:
+            z = z[:, 1:]
     
         ret = dict(
             z=z,
@@ -681,6 +711,7 @@ class Decoder(nn.Module):
         patch_size: int = 16,
         model_size: str = "base",
         token_channels: int = 16,
+        aux_cls_token: bool = False,
         diff_cls_token: bool = False,
         num_register_tokens: int = 0,
     ) -> None:
@@ -692,6 +723,7 @@ class Decoder(nn.Module):
         self.token_channels = token_channels
         self.seq_len = self.grid_size ** 2
         self.num_register_tokens = num_register_tokens
+        self.aux_cls_token = aux_cls_token
         self.diff_cls_token = diff_cls_token
         
         params = SIZE_DICT[self.model_size]
@@ -700,16 +732,10 @@ class Decoder(nn.Module):
         # learnable embeddings
         scale = width ** -0.5
         if self.num_register_tokens > 0:
-            if self.diff_cls_token:
-                self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens + 1 + self.seq_len, width))
-            else:
-                self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens + self.seq_len, width))
+            self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens + self.seq_len, width))
             self.register_token_embedding = nn.Parameter(scale * torch.randn(1, self.num_register_tokens, width))
         else:
-            if self.diff_cls_token:
-                self.positional_embedding = nn.Parameter(scale * torch.randn(1, 1 + self.seq_len, width))
-            else:
-                self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.seq_len, width))
+            self.positional_embedding = nn.Parameter(scale * torch.randn(1, self.seq_len, width))
         
         self.mask_token = nn.Parameter(scale * torch.randn(1, 1, width))
 
@@ -737,7 +763,7 @@ class Decoder(nn.Module):
             self.grid_size, 
             self.grid_size, 
             n_register=self.num_register_tokens, 
-            add_cls=self.diff_cls_token
+            add_cls=False
         ).unsqueeze(0)
         self.register_buffer("rope_tensor", rope_tensor, persistent=False)
 
@@ -747,6 +773,10 @@ class Decoder(nn.Module):
     def forward(self, z_latents: Tensor, ids_restore: Tensor | None = None) -> Tensor:
         """forward pass through decoder."""
         # z_latents: [bsz, seq_len, token_channels] or [bsz, 1 + seq_len, token_channels] if diff_cls_token
+        if self.diff_cls_token:
+            # we never send cls token to decoder
+            z_latents = z_latents[:, 1:]
+
         z = self.decoder_embed(z_latents)
         bsz, seq_len, _ = z.shape
 
@@ -770,9 +800,6 @@ class Decoder(nn.Module):
 
         if self.num_register_tokens > 0:
             z = z[:, self.num_register_tokens:]
-
-        if self.diff_cls_token:
-            z = z[:, 1:]
 
         z = self.ffn(z)  # embed -> patch
         z = self.conv_out(z)  # final 3x3 conv
@@ -988,6 +1015,7 @@ class DeTok(nn.Module):
                 use_skip_connection=use_skip_connection,
                 last_layer_feature=last_layer_feature,
                 aux_cls_token=aux_cls_token,
+                diff_cls_token=diff_cls_token,
                 num_register_tokens=num_register_tokens,
             )
         self.decoder = Decoder(
@@ -995,6 +1023,7 @@ class DeTok(nn.Module):
             patch_size=patch_size,
             model_size=vit_dec_model_size,
             token_channels=token_channels,
+            aux_cls_token=aux_cls_token,
             diff_cls_token=diff_cls_token,
             num_register_tokens=0,
         )
@@ -1276,9 +1305,6 @@ class DeTok(nn.Module):
         ids_restore = ret["ids_restore"]
         ids_keep = ret["ids_keep"]
         ids_masked = ret["ids_masked"]
-        
-        if self.aux_cls_token and not self.diff_cls_token:
-            z_latents = z_latents[:, 1:]
 
         if self.use_aux and self.training:
             x_aux = (x + 1) * 0.5
@@ -1395,11 +1421,7 @@ class DeTok(nn.Module):
     def tokenize(self, x: Tensor, sampling: bool = False) -> Tensor:
         """tokenize input image and normalize the latent tokens."""
         ret = self.encode(x, sampling=sampling)
-        z = ret["z_latents"]
-        
-        if self.aux_cls_token and not self.diff_cls_token:
-            z = z[:, 1:]
-            
+        z = ret["z_latents"]            
         z = self.normalize_z(z)
         
         if self.diff_cls_token:

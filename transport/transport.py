@@ -58,6 +58,8 @@ class Transport:
         loss_type,
         train_eps,
         sample_eps,
+        diff_cls_token=False,
+        cls_weight=0.03,
         use_cosine_loss=False,
         use_lognorm=False,
         partitial_train=None,
@@ -80,6 +82,8 @@ class Transport:
         self.partitial_train = partitial_train
         self.partial_ratio = partial_ratio
         self.shift_lg = shift_lg
+        self.diff_cls_token = diff_cls_token
+        self.cls_weight = cls_weight
 
     def prior_logp(self, z):
         """
@@ -222,6 +226,12 @@ class Transport:
         terms = {}
         terms["pred"] = model_output
         if self.model_type == ModelType.VELOCITY:
+            if self.diff_cls_token:
+                cls_loss = mean_flat(((model_output[:, 0, :] - ut[:, 0, :]) ** 2)) * self.cls_weight
+                terms["loss"] = mean_flat(((model_output[:, 1:, :] - ut[:, 1:, :]) ** 2)) + cls_loss
+            else:
+                terms["loss"] = mean_flat(((model_output - ut) ** 2))
+
             terms["loss"] = mean_flat(((model_output - ut) ** 2))
             if self.use_cosine_loss:
                 terms["cos_loss"] = mean_flat(

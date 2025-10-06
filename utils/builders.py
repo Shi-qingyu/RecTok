@@ -202,6 +202,7 @@ def create_generation_model(args):
             force_one_d_seq=args.force_one_d_seq,
             legacy_mode=args.legacy_mode, # legacy mode: cfg on the first three channels only
             qk_norm=args.qk_norm,
+            diff_cls_token=getattr(args, "diff_cls_token", False),
         )
     elif args.model in models.LightningDiT_models:
         model = models.LightningDiT_models[args.model](
