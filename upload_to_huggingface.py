@@ -86,13 +86,13 @@ def upload_to_huggingface(zip_path, repo_id, token=None):
         return False
 
 
-def main():
+def main(args):
     """
     Main function to compress folders and upload to HuggingFace.
     """
     # Configuration
-    base_dir = "work_dirs/tokenizer_training"
-    repo_id = "QingyuShi/SemanticTok"
+    base_dir = args.base_dir
+    repo_id = args.repo_id
     token = "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"  # Set to your HF token if needed, or use HF CLI login
     
     # Create temporary directory for zip files
@@ -161,4 +161,4 @@ if __name__ == "__main__":
     base_dir = args.base_dir
     repo_id = args.repo_id
     token = args.token
-    main()
+    main(args)
