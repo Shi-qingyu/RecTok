@@ -75,5 +75,6 @@ torchrun \
   --kl_loss_weight "${kl_loss_weight}" \
   --aux_loss_weight "${aux_loss_weight}" \
   --online_eval \
+  --eval_freq 50 \
   --epochs "${epochs}" --discriminator_start_epoch "${discriminator_start_epoch}" \
   --data_path "${data_path}"

@@ -41,6 +41,6 @@ torchrun \
     --force_one_d_seq $force_one_d_seq \
     --num_sampling_steps 250 --cfg 1.3 \
     --cfg_list 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 \
-    --online_eval --eval_freq 10 \
+    --online_eval --eval_freq 100 \
     --vis_freq 50 --eval_bsz 256 \
     --data_path ./data/imagenet/train
