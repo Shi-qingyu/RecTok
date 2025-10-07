@@ -350,12 +350,13 @@ class Encoder(nn.Module):
         x = self.ln_pre(x)
         for block in self.transformer:
             x = block(x, rope)
-        x = self.ln_post(x)
         
         if self.last_layer_feature:
             z_aux = x
+            x = self.ln_post(x)
             z = self.latent_head(x)    # [bsz, seq_len, token_channels]
         else:
+            x = self.ln_post(x)
             z = self.latent_head(x)
             z_aux = z
         

@@ -895,24 +895,24 @@ def evaluate_tokenizer(
     torch.distributed.barrier()
 
     # Cleanup if needed
-    if not args.keep_eval_folder:
-        start_time = time.perf_counter()
-        subset_files = [f"{eval_dir}/{index:06d}.png" for index in img_ids_local]
-        for file_path in subset_files:
-            try:
-                os.remove(file_path)
-            except FileNotFoundError:
-                pass
+    # if not args.keep_eval_folder:
+    #     start_time = time.perf_counter()
+    #     subset_files = [f"{eval_dir}/{index:06d}.png" for index in img_ids_local]
+    #     for file_path in subset_files:
+    #         try:
+    #             os.remove(file_path)
+    #         except FileNotFoundError:
+    #             pass
 
-        # Ensure all processes wait here before proceeding
-        torch.distributed.barrier()
+    #     # Ensure all processes wait here before proceeding
+    #     torch.distributed.barrier()
 
-        # Rank 0 removes the directories if they are empty
-        if rank == 0:
-            if not os.listdir(eval_dir):
-                os.rmdir(eval_dir)
-            logger.info("Removed evaluation folders.")
-        logger.info(f"Cleanup time: {time.perf_counter() - start_time:.2f}s")
+    #     # Rank 0 removes the directories if they are empty
+    #     if rank == 0:
+    #         if not os.listdir(eval_dir):
+    #             os.rmdir(eval_dir)
+    #         logger.info("Removed evaluation folders.")
+    #     logger.info(f"Cleanup time: {time.perf_counter() - start_time:.2f}s")
 
     torch.distributed.barrier()
     torch.cuda.empty_cache()
