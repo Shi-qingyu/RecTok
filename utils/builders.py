@@ -143,6 +143,7 @@ def create_generation_model(args):
                 use_skip_connection=getattr(args, "use_skip_connection", False),
                 aux_cls_token=getattr(args, "aux_cls_token", False),
                 diff_cls_token=getattr(args, "diff_cls_token", False),
+                pooling_cls_token=getattr(args, "pooling_cls_token", False),
             )
         elif args.tokenizer in models.DeAE_models:
             tokenizer: nn.Module = models.DeAE_models[args.tokenizer](

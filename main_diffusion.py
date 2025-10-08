@@ -216,6 +216,7 @@ def get_args_parser():
     parser.add_argument("--num_register_tokens", default=0, type=int)
     parser.add_argument("--aux_cls_token", action="store_true")
     parser.add_argument("--diff_cls_token", action="store_true")
+    parser.add_argument("--pooling_cls_token", action="store_true")
 
     # tokenizer cache parameters
     parser.add_argument("--collect_tokenizer_stats", action="store_true")
