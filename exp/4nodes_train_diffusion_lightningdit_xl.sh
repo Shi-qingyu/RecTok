@@ -45,6 +45,7 @@ torchrun \
     --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl --overwrite_stats \
     --load_tokenizer_from work_dirs/$tokenizer_project/$tokenizer_exp_name/checkpoints/epoch_0199.pth \
     --model LightningDiT_xl \
+    --qk_norm \
     --force_one_d_seq $force_one_d_seq \
     --num_sampling_steps 250 --cfg 1.3 \
     --cfg_list 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 \
