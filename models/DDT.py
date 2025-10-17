@@ -321,6 +321,31 @@ class DiTwDDTHead(nn.Module):
         return samples
 
 
+def DiTwDDTHead_b(**kwargs):
+    logger.info(f"DiTwDDTHead_b kwargs: {kwargs}")
+    return DiTwDDTHead(
+        img_size=kwargs.get("img_size", 256),
+        patch_size=kwargs.get("patch_size", [1, 1]),
+        tokenizer_patch_size=kwargs.get("tokenizer_patch_size", 16),
+        token_channels=kwargs.get("token_channels", 768),
+        hidden_size=kwargs.get("hidden_size", [384, 2048]),
+        depth=kwargs.get("depth", [12, 2]),
+        num_heads=kwargs.get("num_heads", [6, 16]),
+        mlp_ratio=kwargs.get("mlp_ratio", 4.0),
+        label_dropout_prob=kwargs.get("label_dropout_prob", 0.1),
+        num_classes=kwargs.get("num_classes", 1000),
+        use_qknorm=kwargs.get("use_qknorm", False),
+        use_swiglu=kwargs.get("use_swiglu", True),
+        use_rope=kwargs.get("use_rope", True),
+        use_rmsnorm=kwargs.get("use_rmsnorm", True),
+        wo_shift=kwargs.get("wo_shift", False),
+        use_pos_embed=kwargs.get("use_pos_embed", True),
+        sampling_method=kwargs.get("sampling_method", "euler"),
+        num_sampling_steps=kwargs.get("num_sampling_steps", 50),
+        force_one_d_seq=kwargs.get("force_one_d_seq", 0),
+    )
+    
+
 def DiTwDDTHead_xl(**kwargs):
     logger.info(f"DiTwDDTHead_xl kwargs: {kwargs}")
     return DiTwDDTHead(
@@ -347,5 +372,6 @@ def DiTwDDTHead_xl(**kwargs):
 
 
 DiTDDT_models = {
+    "DiTDDT_b": DiTwDDTHead_b,
     "DiTDDT_xl": DiTwDDTHead_xl,
 }

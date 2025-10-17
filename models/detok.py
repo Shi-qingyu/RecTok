@@ -1336,7 +1336,13 @@ class DeTok(nn.Module):
             if noise_level > 0.0:
                 noise_level_tensor = torch.full((bsz, 1, 1), noise_level, device=device)
             else:
-                noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
+                # noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
+
+                # Sample noise level using logit normal distribution for better control
+                # Generate from normal distribution and apply sigmoid to get values in (0,1)
+                normal_samples = torch.randn(bsz, 1, 1, device=device)
+                noise_level_tensor = torch.sigmoid(normal_samples)
+                
             noise_level_tensor = noise_level_tensor.expand(-1, n_tokens, chans)
             noise = torch.randn(bsz, n_tokens, chans, device=device) * self.gamma
             if self.use_additive_noise:

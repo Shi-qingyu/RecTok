@@ -108,6 +108,7 @@ class ode:
                 return numerator / denominator
 
             self.t = th.tensor([compute_tm(t_n, timestep_shift) for t_n in self.t])
+            self.t = th.flip(1 - self.t, dims=[0])
 
         self.atol = atol
         self.rtol = rtol

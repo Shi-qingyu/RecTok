@@ -194,7 +194,7 @@ class Transport:
 
         t = t.to(x1)
         
-        t = self.time_dist_shift * t / (1 + (self.time_dist_shift - 1) * t)
+        t = 1 - self.time_dist_shift * t / (1 + (self.time_dist_shift - 1) * t)
         return t, x0, x1
 
     def training_losses(
@@ -236,7 +236,7 @@ class Transport:
             else:
                 terms["loss"] = mean_flat(((model_output - ut) ** 2))
 
-            terms["loss"] = mean_flat(((model_output - ut) ** 2))
+            # terms["loss"] = mean_flat(((model_output - ut) ** 2))
             if self.use_cosine_loss:
                 terms["cos_loss"] = mean_flat(
                     1 - th.nn.functional.cosine_similarity(model_output, ut, dim=channel_dim)
