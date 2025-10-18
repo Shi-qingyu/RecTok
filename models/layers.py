@@ -750,6 +750,11 @@ def rotate_half(x):
     return rearrange(x, "... d r -> ... (d r)")
 
 
+##################################################################
+# DiTDH-specific layers                                          #
+##################################################################
+
+
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         """
@@ -1010,17 +1015,32 @@ class LightningDDTBlock(nn.Module):
         if len(c.shape) < len(x.shape):
             c = c.unsqueeze(1)  # (B, 1, C)
         if self.wo_shift:
-            scale_msa, gate_msa, scale_mlp, gate_mlp = self.adaLN_modulation(
-                c).chunk(4, dim=-1)
+            scale_msa, gate_msa, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(4, dim=-1)
             shift_msa = None
             shift_mlp = None
         else:
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(
-                c).chunk(6, dim=-1)
-        x = x + DDTGate(self.attn(DDTModulate(self.norm1(x),
-                        shift_msa, scale_msa), rope=feat_rope), gate_msa)
-        x = x + DDTGate(self.mlp(DDTModulate(self.norm2(x),
-                        shift_mlp, scale_mlp)), gate_mlp)
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=-1)
+        x = x + DDTGate(
+            self.attn(
+                DDTModulate(
+                    self.norm1(x),
+                    shift_msa, 
+                    scale_msa
+                ), 
+                rope=feat_rope
+            ), 
+            gate_msa
+        )
+        x = x + DDTGate(
+            self.mlp(
+                DDTModulate(
+                    self.norm2(x),
+                    shift_mlp, 
+                    scale_mlp
+                )
+            ), 
+            gate_mlp
+        )
         return x
 
 

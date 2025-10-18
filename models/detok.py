@@ -1343,7 +1343,7 @@ class DeTok(nn.Module):
                 normal_samples = torch.randn(bsz, 1, 1, device=device)
                 noise_level_tensor = torch.sigmoid(normal_samples)
                 
-            noise_level_tensor = noise_level_tensor.expand(-1, n_tokens, chans)
+            # noise_level_tensor = noise_level_tensor.expand(-1, n_tokens, chans)
             noise = torch.randn(bsz, n_tokens, chans, device=device) * self.gamma
             if self.use_additive_noise:
                 z_latents = z_latents + noise_level_tensor * noise
@@ -1351,7 +1351,6 @@ class DeTok(nn.Module):
                 z_latents = (1 - noise_level_tensor) * z_latents + noise_level_tensor * noise
                 
             if self.aux_input_type == "noisy":
-                noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
                 noise_aux = torch.randn_like(z_latents_aux) * self.gamma
                 z_latents_aux = (1 - noise_level_tensor) * z_latents_aux + noise_level_tensor * noise_aux
 
