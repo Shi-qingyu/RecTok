@@ -162,6 +162,7 @@ def get_args_parser():
     parser.add_argument("--last_layer_feature", action="store_true")
     parser.add_argument("--gamma", default=0.0, type=float, help="noise standard deviation for training")
     parser.add_argument("--use_additive_noise", action="store_true")
+    parser.add_argument("--use_log_normal_noise", action="store_true")
     
     parser.add_argument("--vf_model_type", default="", type=str)
     

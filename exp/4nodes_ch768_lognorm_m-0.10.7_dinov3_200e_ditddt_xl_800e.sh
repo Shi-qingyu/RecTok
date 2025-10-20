@@ -68,6 +68,7 @@ torchrun \
   --aux_input_type "${aux_input_type}" \
   --aux_target "${aux_target}" \
   --gamma "${gamma}" \
+  --use_log_normal_noise \
   --mask_ratio "${mask_ratio}" \
   --mask_ratio_min "${mask_ratio_min}" \
   --mask_ratio_type "${mask_ratio_type}" \
