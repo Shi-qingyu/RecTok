@@ -26,16 +26,35 @@ def fix_random_seeds(seed=31):
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Decay the learning rate with half-cycle cosine after warmup"""
-    if epoch < args.warmup_epochs:
-        lr = args.lr * epoch / args.warmup_epochs
-    else:
-        if args.lr_sched == "constant":
+    ditdh_sched = getattr(args, "ditdh_sched", False)
+    if ditdh_sched:
+        warmup_start_epoch = getattr(args, "warmup_start_epoch", 40)
+        warmup_end_epoch = getattr(args, "warmup_end_epoch", 800)
+        if epoch <= warmup_start_epoch:
             lr = args.lr
-        elif args.lr_sched == "cosine":
-            progress = (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)
-            lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * (1.0 + math.cos(math.pi * progress))
+        elif warmup_start_epoch < epoch <= warmup_end_epoch:
+            if args.lr_sched == "linear":
+                lr = args.lr - (args.lr - args.min_lr) * (epoch - warmup_start_epoch) / (warmup_end_epoch - warmup_start_epoch)
+            elif args.lr_sched == "cosine":
+                progress = (epoch - args.warmup_start_epoch) / (args.warmup_end_epoch - args.warmup_start_epoch)
+                lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * (1.0 + math.cos(math.pi * progress))
+            else:
+                raise NotImplementedError
         else:
-            raise NotImplementedError
+            lr = args.min_lr
+    
+    else:
+        if epoch < args.warmup_epochs:
+            lr = args.lr * epoch / args.warmup_epochs
+        else:
+            if args.lr_sched == "constant":
+                lr = args.lr
+            elif args.lr_sched == "cosine":
+                progress = (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)
+                lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * (1.0 + math.cos(math.pi * progress))
+            else:
+                raise NotImplementedError
+        
     for param_group in optimizer.param_groups:
         if "lr_scale" in param_group:
             param_group["lr"] = lr * param_group["lr_scale"]

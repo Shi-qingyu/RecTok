@@ -218,7 +218,7 @@ def get_args_parser():
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--blr", type=float, default=1e-4)
     parser.add_argument("--min_lr", type=float, default=0.0)
-    parser.add_argument("--lr_sched", type=str, default="cosine", choices=["constant", "cosine"])
+    parser.add_argument("--lr_sched", type=str, default="cosine", choices=["constant", "cosine", "linear"])
     parser.add_argument("--warmup_rate", type=float, default=0.25)
     parser.add_argument("--ema_rate", default=0.999, type=float)
     parser.add_argument("--weight_decay", type=float, default=1e-4)

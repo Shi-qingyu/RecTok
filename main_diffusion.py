@@ -240,7 +240,7 @@ def get_args_parser():
     parser.add_argument("--load_from", type=str, default=None, help="load from pretrained model")
     parser.add_argument("--load_tokenizer_from", type=str, default=None, help="load from pretrained tokenizer")
     parser.add_argument("--keep_n_ckpts", default=1, type=int, help="keep the last n checkpoints")
-    parser.add_argument("--milestone_interval", default=100, type=int, help="keep checkpoints every n epochs")
+    parser.add_argument("--milestone_interval", default=400, type=int, help="keep checkpoints every n epochs")
 
     # evaluation parameters
     parser.add_argument("--num_images_for_eval_and_search", default=10000, type=int)
@@ -255,7 +255,7 @@ def get_args_parser():
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--blr", type=float, default=1e-4)
     parser.add_argument("--min_lr", type=float, default=1e-6)
-    parser.add_argument("--lr_sched", type=str, default="constant", choices=["constant", "cosine"])
+    parser.add_argument("--lr_sched", type=str, default="constant", choices=["constant", "cosine", "linear"])
     parser.add_argument("--warmup_rate", type=float, default=0.25, help="warmup_ep = warmup_rate * total_ep")
     parser.add_argument("--ema_rate", default=0.9999, type=float)
     parser.add_argument("--weight_decay", type=float, default=0.02)
@@ -264,6 +264,9 @@ def get_args_parser():
     parser.add_argument("--beta1", type=float, default=0.9)
     parser.add_argument("--beta2", type=float, default=0.95)
     parser.add_argument("--use_aligned_schedule", action="store_true")
+    parser.add_argument("--ditdh_sched", action="store_true")
+    parser.add_argument("--warmup_start_epoch", type=int, default=40)
+    parser.add_argument("--warmup_end_epoch", type=int, default=800)
 
     # generation parameters
     parser.add_argument("--num_iter", default=64, type=int, help="number of autoregressive steps for MAR")
