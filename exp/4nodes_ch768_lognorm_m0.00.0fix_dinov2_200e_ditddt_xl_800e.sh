@@ -83,6 +83,7 @@ torchrun \
 
 
 tokenizer_project=tokenizer_training
+tokenizer=detok_BB
 tokenizer_exp_name=${exp_name}
 num_register_tokens=0
 
