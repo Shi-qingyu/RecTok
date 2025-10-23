@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semantictok"
+version = "0.1.0"
+description = "Semantic Token Processing Project"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    # Essential ML Libraries
+    "timm==1.0.19",
+    "transformers==4.56.1",
+    "diffusers==0.35.1",
+    "open_clip_torch==3.1.0",
+    "peft==0.17.0",
+    "huggingface_hub==0.34.4",
+    
+    # Scientific Computing
+    "scipy==1.14.0",
+    "numpy==1.26.4",
+    "einops==0.8.0",
+    "matplotlib==3.9.2",
+    
+    # Training & Utilities
+    "wandb==0.20.1",
+    "torchtnt==0.2.4",
+    "torchdiffeq==0.2.5",
+    "rich==13.7.1",
+    "jaxtyping==0.3.2",
+    
+    # Data Processing
+    "gdown==5.2.0",
+    "datasets==3.6.0",
+    
+    # Development Tools
+    "black==24.8.0",
+    "pylint==3.3.8",
+    "flake8==7.3.0",
+    "isort==5.13.2",
+    "ipykernel==6.29.5",
+]
+
+[project.optional-dependencies]
+cuda = [
+    # PyTorch with CUDA support - uncomment when needed
+    "torch==2.6.0+cu124",
+    "torchvision==0.21.0+cu124",
+]
+
+[tool.uv]
+# Extra index URLs for PyTorch CUDA packages
+extra-index-url = [
+    "https://download.pytorch.org/whl/cu124"
+]
+
+# UV workspace configuration
+dev-dependencies = [
+    "black>=24.8.0",
+    "pylint>=3.3.8",
+    "flake8>=7.3.0",
+    "isort>=5.13.2",
+    "ipykernel>=6.29.5",
+]
+
+[tool.uv.sources]
+# Configure sources for specific packages if needed
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["semantictok"]
+
+[tool.pylint.messages_control]
+disable = [
+    "C0330",  # Wrong hanging indentation
+    "C0326",  # Bad whitespace
+]
+
+[tool.pylint.format]
+max-line-length = "88"
