@@ -8,7 +8,7 @@ force_one_d_seq=0
 exp_name=sit_b-${tokenizer_exp_name}
 
 project=gen_model_training
-batch_size=128  # nnodes * ngpus * batch_size = 1024
+batch_size=64  # nnodes * ngpus * batch_size = 1024
 epochs=100
 
 GPUS_PER_NODE=${GPUS_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')}
