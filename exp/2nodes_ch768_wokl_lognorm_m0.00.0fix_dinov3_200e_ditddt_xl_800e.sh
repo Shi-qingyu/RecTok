@@ -39,7 +39,7 @@ mask_ratio_min=0.0
 mask_ratio_type="fix"
 vit_aux_model_size="tiny"
 
-exp_name="detokBB${pretrained_model_name_or_path}-ch${token_channels}-p${patch_size}-wokl-g${gamma}lognorm-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}-aux${aux_model_type}${aux_dec_type}${aux_input_type}${aux_target}cls-10-23"
+exp_name="detokBB${pretrained_model_name_or_path}-ch${token_channels}-p${patch_size}-wokl-g${gamma}lognorm-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}-aux${aux_model_type}${aux_dec_type}${aux_input_type}${aux_target}-10-24"
 
 # add variable
 export MASTER_ADDR=${ARNOLD_WORKER_0_HOST}
