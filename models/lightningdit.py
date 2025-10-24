@@ -105,7 +105,7 @@ class LightningDiT(nn.Module):
         self.sample_fn = self.sampler.sample_ode(
             sampling_method=sampling_method,
             num_steps=int(num_sampling_steps),
-            timestep_shift=10/3,
+            timestep_shift=0.3,
         )
 
         self.initialize_weights()
