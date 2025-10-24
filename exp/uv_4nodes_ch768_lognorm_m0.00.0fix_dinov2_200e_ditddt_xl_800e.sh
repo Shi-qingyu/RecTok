@@ -2,7 +2,6 @@
 sudo apt-get install ffmpeg libsm6 libxext6 tmux htop  -y
 
 
-
 export NCCL_WATCHDOG_TIMEOUT=1800
 export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_DEBUG=INFO
@@ -21,7 +20,7 @@ token_channels=768
 patch_size=16
 pretrained_model_name_or_path=""
 num_register_tokens=0
-aux_model_type="dinov3"
+aux_model_type="dinov2"
 aux_dec_type="transformer"
 aux_input_type="noisy"
 aux_target="align"
@@ -39,7 +38,7 @@ mask_ratio_min=0.0
 mask_ratio_type="fix"
 vit_aux_model_size="tiny"
 
-exp_name="detokBB${pretrained_model_name_or_path}-ch${token_channels}-p${patch_size}-g${gamma}lognorm-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}-aux${aux_model_type}${aux_dec_type}${aux_input_type}${aux_target}-10-20"
+exp_name="detokBB${pretrained_model_name_or_path}-ch${token_channels}-p${patch_size}-g${gamma}lognorm-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}-aux${aux_model_type}${aux_dec_type}${aux_input_type}${aux_target}cls-10-20"
 
 # add variable
 export MASTER_ADDR=${ARNOLD_WORKER_0_HOST}
@@ -71,6 +70,7 @@ uv run torchrun \
   --aux_target "${aux_target}" \
   --gamma "${gamma}" \
   --use_log_normal_noise \
+  --aux_cls_token \
   --mask_ratio "${mask_ratio}" \
   --mask_ratio_min "${mask_ratio_min}" \
   --mask_ratio_type "${mask_ratio_type}" \
@@ -80,6 +80,7 @@ uv run torchrun \
   --discriminator_weight "${discriminator_weight}" \
   --kl_loss_weight "${kl_loss_weight}" \
   --aux_loss_weight "${aux_loss_weight}" \
+  --keep_eval_folder \
   --epochs "${epochs}" --discriminator_start_epoch "${discriminator_start_epoch}" \
   --data_path "${data_path}"
 
@@ -122,6 +123,7 @@ uv run torchrun \
     --num_register_tokens $num_register_tokens \
     --token_channels $token_channels \
     --tokenizer $tokenizer --use_ema_tokenizer --collect_tokenizer_stats \
+    --aux_cls_token \
     --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl \
     --load_tokenizer_from work_dirs/tokenizer_training/$tokenizer_exp_name/checkpoints/epoch_0199.pth \
     --model $model \

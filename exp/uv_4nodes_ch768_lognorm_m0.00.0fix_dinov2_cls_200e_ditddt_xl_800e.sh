@@ -7,7 +7,7 @@ export NCCL_WATCHDOG_TIMEOUT=1800
 export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_DEBUG=INFO
 
-cd /afs/chatrl/users/sqy/projects/SemanticTok
+cd /mnt/bn/zilongdata-us/xiangtai/SemanticTok/
 
 # Use uv instead of pip
 uv sync --extra cuda
