@@ -241,7 +241,7 @@ def get_args_parser():
     parser.add_argument("--load_from", type=str, default=None, help="load from pretrained model")
     parser.add_argument("--load_tokenizer_from", type=str, default=None, help="load from pretrained tokenizer")
     parser.add_argument("--keep_n_ckpts", default=1, type=int, help="keep the last n checkpoints")
-    parser.add_argument("--milestone_interval", default=400, type=int, help="keep checkpoints every n epochs")
+    parser.add_argument("--milestone_interval", default=80, type=int, help="keep checkpoints every n epochs")
 
     # evaluation parameters
     parser.add_argument("--num_images_for_eval_and_search", default=10000, type=int)
