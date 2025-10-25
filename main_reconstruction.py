@@ -131,8 +131,8 @@ def main(args: argparse.Namespace) -> int:
     total_time = int(time.time() - start_time + args.last_elapsed_time)
     logger.info(f"Training time {str(datetime.timedelta(seconds=total_time))}")
 
-    for use_ema in [False, True]:
-        evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
+    # for use_ema in [False, True]:
+    #     evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
 
     return 0
 
