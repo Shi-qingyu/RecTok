@@ -40,11 +40,11 @@ vit_aux_model_size="tiny"
 exp_name="detokBB${pretrained_model_name_or_path}-ch${token_channels}-p${patch_size}-g${gamma}lognorm-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}-aux${aux_model_type}${aux_dec_type}${aux_input_type}${aux_target}-10-20"
 
 # add variable
-export MASTER_ADDR=${ARNOLD_WORKER_0_HOST}
-export PORT=(${ARNOLD_WORKER_0_PORT//,/ })
-export NPROC_PER_NODE=${ARNOLD_WORKER_GPU}
-export NNODES=${ARNOLD_WORKER_NUM}
-export NODE_RANK=${ARNOLD_ID}
+export MASTER_ADDR=localhost
+export PORT=29507
+export NPROC_PER_NODE=8
+export NNODES=1
+export NODE_RANK=0
 
 
 echo "[INFO] per-GPU batch=${batch_size}"
