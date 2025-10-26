@@ -210,6 +210,7 @@ def get_args_parser():
     parser.add_argument("--img_size", default=256, type=int)
     parser.add_argument("--tokenizer", default=None, type=str)
     parser.add_argument("--pretrained_model_name_or_path", default="", type=str)
+    parser.add_argument("--freeze_encoder", action="store_true")
     parser.add_argument("--token_channels", default=16, type=int)
     parser.add_argument("--tokenizer_patch_size", default=16, type=int)
     parser.add_argument("--use_ema_tokenizer", action="store_true")

@@ -200,7 +200,7 @@ def ckpt_resume(
             checkpoint = torch.load(args.load_from, map_location="cpu", weights_only=False)
             # load the model state dict if it exists
             state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint
-            if args.freeze_encoder:
+            if getattr(args, "freeze_encoder", False):
                 unpaired_keys = ["encoder.latent_head", "decoder.decoder_embed", "aux_decoders.dinov2.token_embedding"]
                 state_dict = {k: v for k, v in state_dict.items() if not any(k.startswith(key) for key in unpaired_keys)}
             msg = model.load_state_dict(state_dict, strict=False)
@@ -211,7 +211,7 @@ def ckpt_resume(
             if "model_ema" in checkpoint:
                 logger.info(f"[Model-load] Loaded EMA")
                 ema_state_dict = checkpoint["model_ema"]
-                if args.freeze_encoder:
+                if getattr(args, "freeze_encoder", False):
                     unpaired_keys = ["encoder.latent_head", "decoder.decoder_embed", "aux_decoders.dinov2.token_embedding"]
                     ema_state_dict = {k: v for k, v in ema_state_dict.items() if not any(k.startswith(key) for key in unpaired_keys)}
             else:
