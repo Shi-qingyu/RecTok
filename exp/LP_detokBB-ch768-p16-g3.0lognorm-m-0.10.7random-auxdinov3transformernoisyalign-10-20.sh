@@ -1,19 +1,20 @@
 batch_size=512
 
-checkpoint_path=work_dirs/tokenizer_training/detokBB-ch768-p16-g3.0lognorm-m0.00.0fix-auxdinov3transformernoisyalign-10-20/checkpoints/epoch_0199.pth
+checkpoint_path=work_dirs/tokenizer_training/detokBB-ch768-p16-g3.0lognorm-m-0.10.7random-auxdinov3transformernoisyalign-10-20/checkpoints/epoch_0199.pth
 token_channels=768
 pretrained_model_name_or_path=""
 num_register_tokens=0
 
 # add variable
-export MASTER_ADDR=${ARNOLD_WORKER_0_HOST}
-export PORT=(${ARNOLD_WORKER_0_PORT//,/ })
-export NPROC_PER_NODE=${ARNOLD_WORKER_GPU}
-export NNODES=${ARNOLD_WORKER_NUM}
-export NODE_RANK=${ARNOLD_ID}
+# add variable
+MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
+MASTER_PORT=${MASTER_PORT:-$(shuf -i 20001-29999 -n 1)}
+export NPROC_PER_NODE=8
+export NNODES=1
+export NODE_RANK=0
 
 export PYTHONPATH=.
-torchrun --nproc_per_node=${NPROC_PER_NODE} --nnodes=${NNODES} --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${PORT} \
+torchrun --nproc_per_node=${NPROC_PER_NODE} --nnodes=${NNODES} --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
     linear_probing/detok.py \
     --model detok_BB \
     --last_layer_feature \
