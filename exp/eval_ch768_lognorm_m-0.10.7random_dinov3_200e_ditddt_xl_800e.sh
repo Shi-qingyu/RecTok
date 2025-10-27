@@ -40,8 +40,8 @@ vit_aux_model_size="tiny"
 exp_name="detokBB${pretrained_model_name_or_path}-ch${token_channels}-p${patch_size}-g${gamma}lognorm-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}-aux${aux_model_type}${aux_dec_type}${aux_input_type}${aux_target}-10-20"
 
 # add variable
-export MASTER_ADDR=localhost
-export PORT=29507
+MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
+MASTER_PORT=${MASTER_PORT:-$(shuf -i 20001-29999 -n 1)}
 export NPROC_PER_NODE=8
 export NNODES=1
 export NODE_RANK=0
@@ -51,11 +51,9 @@ echo "[INFO] per-GPU batch=${batch_size}"
 
 # Use uv run to execute the training script
 torchrun \
-  --nnodes="${NNODES}" \
   --nproc_per_node="${NPROC_PER_NODE}" \
-  --node_rank="${NODE_RANK}" \
   --master_addr="${MASTER_ADDR}" \
-  --master_port="${PORT}" \
+  --master_port="${MASTER_PORT}" \
   main_reconstruction.py \
   --project "${project}" --exp_name "${exp_name}" --auto_resume \
   --batch_size "${batch_size}" --model "${model}" \
