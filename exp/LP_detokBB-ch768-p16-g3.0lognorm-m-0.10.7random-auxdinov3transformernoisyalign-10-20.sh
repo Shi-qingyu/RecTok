@@ -2,7 +2,7 @@ batch_size=512
 
 checkpoint_path=work_dirs/tokenizer_training/detokBB-ch768-p16-g3.0lognorm-m-0.10.7random-auxdinov3transformernoisyalign-10-20/checkpoints/epoch_0199.pth
 token_channels=768
-pretrained_model_name_or_path=""
+pretrained_model_name_or_path="none"
 num_register_tokens=0
 
 # add variable
