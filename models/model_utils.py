@@ -2,6 +2,7 @@
 # model size configurations
 SIZE_DICT = {
     "tiny": {"width": 192, "layers": 3, "heads": 4},
+    "tiny_l": {"width": 1024, "layers": 3, "heads": 16},
     "small": {"width": 512, "layers": 8, "heads": 8},
     "base": {"width": 768, "layers": 12, "heads": 12},
     "large": {"width": 1024, "layers": 24, "heads": 16},
