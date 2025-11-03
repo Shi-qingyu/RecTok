@@ -69,7 +69,8 @@ def main(args: argparse.Namespace) -> int:
     )
 
     # initial visualization
-    visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), args.start_epoch)
+    if not args.aux_decoder_only:
+        visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), args.start_epoch)
 
     if args.vis_only:
         return 0
@@ -116,7 +117,7 @@ def main(args: argparse.Namespace) -> int:
             torch.distributed.barrier()
 
         # periodic visualization
-        if (epoch + 1) % args.vis_freq == 0:
+        if (epoch + 1) % args.vis_freq == 0 and not args.aux_decoder_only:
             visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), epoch)
 
         # online evaluation
@@ -131,8 +132,8 @@ def main(args: argparse.Namespace) -> int:
     total_time = int(time.time() - start_time + args.last_elapsed_time)
     logger.info(f"Training time {str(datetime.timedelta(seconds=total_time))}")
 
-    # for use_ema in [False, True]:
-    #     evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
+    for use_ema in [False, True]:
+        evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
 
     return 0
 
@@ -155,7 +156,10 @@ def get_args_parser():
     parser.add_argument("--num_register_tokens", default=0, type=int)
     parser.add_argument("--diff_cls_token", action="store_true")
     parser.add_argument("--disable_kl", action="store_true")
-
+    parser.add_argument("--aux_decoder_only", action="store_true")
+    parser.add_argument("--channel_drop", default=0.0, type=float)
+    parser.add_argument("--low_rank_space", action="store_true")
+    
     parser.add_argument("--mask_ratio", default=0.0, type=float)
     parser.add_argument("--mask_ratio_min", default=-0.1, type=float)
     parser.add_argument("--mask_ratio_type", default="random", type=str)
@@ -163,7 +167,7 @@ def get_args_parser():
     parser.add_argument("--last_layer_feature", action="store_true")
     parser.add_argument("--gamma", default=0.0, type=float, help="noise standard deviation for training")
     parser.add_argument("--use_additive_noise", action="store_true")
-    parser.add_argument("--use_log_normal_noise", action="store_true")
+    parser.add_argument("--noise_schedule", default="uniform", type=str)
     
     parser.add_argument("--vf_model_type", default="", type=str)
     

@@ -145,6 +145,7 @@ def create_generation_model(args):
                 diff_cls_token=getattr(args, "diff_cls_token", False),
                 pooling_cls_token=getattr(args, "pooling_cls_token", False),
                 disable_kl=getattr(args, "disable_kl", False),
+                low_rank_space=getattr(args, "low_rank_space", False),
             )
         elif args.tokenizer in models.DeAE_models:
             tokenizer: nn.Module = models.DeAE_models[args.tokenizer](
@@ -316,8 +317,11 @@ def create_reconstruction_model(args):
             vit_aux_model_size=getattr(args, "vit_aux_model_size", "tiny"),
             aux_cls_token=getattr(args, "aux_cls_token", False),
             pooling_cls_token=getattr(args, "pooling_cls_token", False),
-            use_log_normal_noise=getattr(args, "use_log_normal_noise", False),
+            noise_schedule=getattr(args, "noise_schedule", "uniform"),
             disable_kl=getattr(args, "disable_kl", False),
+            aux_decoder_only=getattr(args, "aux_decoder_only", False),
+            channel_drop=getattr(args, "channel_drop", 0.0),
+            low_rank_space=getattr(args, "low_rank_space", False),
         )
     elif args.model in models.DeAE_models:
         model = models.DeAE_models[args.model](

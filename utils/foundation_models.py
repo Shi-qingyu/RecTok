@@ -54,6 +54,24 @@ def create_foundation_model(model_type: str = "dinov2"):
 
         return foundation_model, transforms
 
+    elif model_type == "dinov3b":
+        ckpt_path = os.path.join("offline_models", "dinov3_vit_base_patch14")
+
+        if os.path.exists(ckpt_path):
+            transforms = AutoImageProcessor.from_pretrained(ckpt_path)
+            foundation_model = AutoModel.from_pretrained(
+                ckpt_path, 
+            )
+            logger.info(f"[Foundation Model] Loaded foundation model DINOv3 from {ckpt_path}")
+        else:
+            transforms = AutoImageProcessor.from_pretrained("facebook/dinov3-vitb16-pretrain-lvd1689m")
+            foundation_model = AutoModel.from_pretrained(
+                "facebook/dinov3-vitb16-pretrain-lvd1689m", 
+            )
+            logger.info(f"[Foundation Model] Loaded foundation model DINOv3 from transformers")
+
+        return foundation_model, transforms
+
     elif model_type == "sam":
         ckpt_path = os.path.join("offline_models", "sam-vit-large")
         if os.path.exists(ckpt_path):

@@ -2,6 +2,7 @@ from typing import Optional
 import logging
 import random
 from functools import partial
+from math import sqrt
 import os
 
 import numpy as np
@@ -751,6 +752,7 @@ class Decoder(nn.Module):
         token_channels: int = 16,
         diff_cls_token: bool = False,
         num_register_tokens: int = 0,
+        low_rank_space: bool = False,
     ) -> None:
         super().__init__()
         self.img_size = img_size
@@ -761,7 +763,8 @@ class Decoder(nn.Module):
         self.seq_len = self.grid_size ** 2
         self.num_register_tokens = num_register_tokens
         self.diff_cls_token = diff_cls_token
-        
+        self.low_rank_space = low_rank_space
+
         params = SIZE_DICT[self.model_size]
         num_layers, num_heads, width = params["layers"], params["heads"], params["width"]
 
@@ -776,7 +779,13 @@ class Decoder(nn.Module):
         self.mask_token = nn.Parameter(scale * torch.randn(1, 1, width))
 
         # decoder layers
-        self.decoder_embed = nn.Linear(self.token_channels, width)
+        if self.low_rank_space: 
+            self.decoder_embed = nn.Sequential(
+                nn.Linear(self.token_channels, 128),
+                nn.Linear(128, width),
+            )
+        else:
+            self.decoder_embed = nn.Linear(self.token_channels, width)
         norm_layer = partial(nn.RMSNorm, eps=1e-6)
         self.ln_pre = norm_layer(width)
         self.transformer = nn.ModuleList(
@@ -1017,8 +1026,11 @@ class DeTok(nn.Module):
         use_skip_connection: bool = False,
         gamma: float = 3.0,
         use_additive_noise: bool = False,
-        use_log_normal_noise: bool = False,
+        noise_schedule: str = "uniform",
         disable_kl: bool = False,
+        aux_decoder_only: bool = False,
+        channel_drop: float = 0.0,
+        low_rank_space: bool = False,
         # normalization parameters used for generative model training
         mean=0.0,
         std=1.0,
@@ -1074,14 +1086,19 @@ class DeTok(nn.Module):
                 num_register_tokens=0,
                 disable_kl=disable_kl,
             )
-        self.decoder = Decoder(
-            img_size=img_size,
-            patch_size=patch_size,
-            model_size=vit_dec_model_size,
-            token_channels=token_channels,
-            diff_cls_token=diff_cls_token,
-            num_register_tokens=0,
-        )
+            
+        if not aux_decoder_only:
+            self.decoder = Decoder(
+                img_size=img_size,
+                patch_size=patch_size,
+                model_size=vit_dec_model_size,
+                token_channels=token_channels,
+                diff_cls_token=diff_cls_token,
+                num_register_tokens=0,
+                low_rank_space=low_rank_space,
+            )
+        else:
+            self.decoder = None
 
         # model configuration
         self.seq_h = img_size // patch_size
@@ -1099,8 +1116,12 @@ class DeTok(nn.Module):
         self.aux_cls_token = aux_cls_token
         self.pooling_cls_token = pooling_cls_token
         self.diff_cls_token = diff_cls_token
-        self.use_log_normal_noise = use_log_normal_noise
+        self.noise_schedule = noise_schedule
         self.disable_kl = disable_kl
+        self.aux_decoder_only = aux_decoder_only
+        self.channel_drop = channel_drop
+        
+        self.timestep_shift = sqrt(self.seq_h * self.seq_w * self.token_channels / 4096)
         
         # initialize weights
         self.apply(self._init_weights)
@@ -1151,14 +1172,14 @@ class DeTok(nn.Module):
                     use_adaptive_channels=use_adaptive_channels,
                 )
 
-            if "dinov3" in aux_model_type:
-                aux_foundation_model, transforms = create_foundation_model("dinov3")
+            if aux_model_type == "dinov3" or aux_model_type == "dinov3b":
+                aux_foundation_model, transforms = create_foundation_model(aux_model_type)
                 aux_foundation_model.eval()
                 aux_foundation_model.requires_grad_(False)
-                self.aux_foundation_models["dinov3"] = aux_foundation_model
-                self.aux_foundation_models_transforms["dinov3"] = transforms
+                self.aux_foundation_models[aux_model_type] = aux_foundation_model
+                self.aux_foundation_models_transforms[aux_model_type] = transforms
                 
-                self.aux_decoders["dinov3"] = aux_dec(
+                self.aux_decoders[aux_model_type] = aux_dec(
                     img_size=img_size,
                     patch_size=patch_size,
                     model_size=vit_aux_model_size,
@@ -1283,8 +1304,9 @@ class DeTok(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-        for param in self.decoder.parameters():
-            param.requires_grad = True
+        if self.decoder is not None:
+            for param in self.decoder.parameters():
+                param.requires_grad = True
 
         params_M = sum(p.numel() for p in self.parameters() if p.requires_grad) / 1e6
         logger.info(f"[DeTok] trainable params: {params_M:.2f}M (after freezing all but decoder)")
@@ -1360,11 +1382,16 @@ class DeTok(nn.Module):
             if noise_level > 0.0:
                 noise_level_tensor = torch.full((bsz, 1, 1), noise_level, device=device)
             else:
-                if self.use_log_normal_noise:
+                if self.noise_schedule == "lognorm":
                 # Sample noise level using logit normal distribution for better control
                 # Generate from normal distribution and apply sigmoid to get values in (0,1)
                     normal_samples = torch.randn(bsz, 1, 1, device=device)
                     noise_level_tensor = torch.sigmoid(normal_samples)
+                elif self.noise_schedule == "shift":
+                    noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
+                    noise_level_tensor = self.timestep_shift * noise_level_tensor / (1 + (self.timestep_shift - 1) * noise_level_tensor)
+                elif self.noise_schedule == "uniform":
+                    noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
                 else:
                     noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
                 
@@ -1375,6 +1402,13 @@ class DeTok(nn.Module):
             if self.aux_input_type == "noisy":
                 noise_aux = torch.randn_like(z_latents_aux) * self.gamma
                 z_latents_aux = (1 - noise_level_tensor) * z_latents_aux + noise_level_tensor * noise_aux
+
+        if self.channel_drop > 0.0 and self.training:
+            bsz, n_tokens, chans = z_latents.shape
+            ch_mask = (torch.rand(bsz, 1, chans, device=z_latents.device) > self.channel_drop).float()
+            scale = 1.0 / (1.0 - self.channel_drop + 1e-8)
+            z_latents     = z_latents     * ch_mask * scale
+            z_latents_aux = z_latents_aux * ch_mask * scale
 
         ret = dict(
             z_latents=z_latents,
@@ -1417,7 +1451,7 @@ class DeTok(nn.Module):
                         else:
                             aux_feature = aux_foundation_model.forward_features(x_dino)[:, 1:]   # [B, 256, dim]
 
-                elif model_type == "dinov3":
+                elif model_type == "dinov3" or model_type == "dinov3b":
                     x_dinov3 = (x_aux * 255).to(torch.uint8)
                     inputs = transforms(x_dinov3, return_tensors="pt").to(x.device)
                     inputs["pixel_values"] = F.interpolate(
@@ -1505,14 +1539,17 @@ class DeTok(nn.Module):
             aux_features = None
             pred_aux_features = None
 
-        if isinstance(self.encoder, DualEncoder):
-            decoded = self.decoder(z_latents[:z_latents.shape[0] // 4], ids_restore=None)
+        if self.decoder is not None:
+            if isinstance(self.encoder, DualEncoder):
+                decoded = self.decoder(z_latents[:z_latents.shape[0] // 4], ids_restore=None)
+            else:
+                decoded = self.decoder(z_latents, ids_restore=ids_restore)  # [bsz, 3, img_size, img_size]
         else:
-            decoded = self.decoder(z_latents, ids_restore=ids_restore)  # [bsz, 3, img_size, img_size]
+            decoded = x
 
         result_dict = dict(
             posteriors=posteriors,
-            z_latents=z_latents,
+            z_latents=None,
             ids_restore=ids_restore,
             vf_feature=None,
             aux_features=aux_features,

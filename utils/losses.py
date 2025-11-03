@@ -389,7 +389,7 @@ class AuxLoss(nn.Module):
             aux_feature = F.normalize(aux_feature, dim=-1)
             pred_aux_feature = F.normalize(pred_aux_feature, dim=-1)
             
-            aux_loss = -(aux_feature * pred_aux_feature).sum(dim=-1, keepdim=True)
+            aux_loss = 1 - (aux_feature * pred_aux_feature).sum(dim=-1, keepdim=True)
             aux_loss = aux_loss.mean()
         else:
             raise ValueError(f"unsupported aux_loss_type {self.aux_loss_type}")
