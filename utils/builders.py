@@ -284,7 +284,7 @@ def create_reconstruction_model(args):
         model = models.VAE_models[args.model](
             resolution=args.img_size,
             embed_dim=args.token_channels,
-            gamma=args.gamma,
+            gamma=getattr(args, "gamma", 3.0),
             aux_model_type=getattr(args, "aux_model_type", ""),
             aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
             aux_model_size=getattr(args, "aux_model_size", "tiny"),
@@ -307,7 +307,6 @@ def create_reconstruction_model(args):
             diff_cls_token=getattr(args, "diff_cls_token", False),
             mask_ratio_type=getattr(args, "mask_ratio_type", "random"),
             use_skip_connection=getattr(args, "use_skip_connection", False),
-            vf_model_type=getattr(args, "vf_model_type", ""),
             aux_model_type=getattr(args, "aux_model_type", ""),
             aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
             aux_input_type=getattr(args, "aux_input_type", "noisy"),

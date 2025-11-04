@@ -175,7 +175,7 @@ def get_args_parser():
     parser.add_argument("--aux_dec_type", default="transformer", type=str)
     parser.add_argument("--vit_aux_model_size", default="tiny", type=str)
     parser.add_argument("--use_adaptive_channels", action="store_true")
-    parser.add_argument("--aux_input_type", default="noisy", type=str, choices=["noisy", "clean"])
+    parser.add_argument("--aux_input_type", default="noisy", type=str)
     parser.add_argument("--aux_target", default="reconstruction", type=str)
     parser.add_argument("--aux_cls_token", action="store_true")
     parser.add_argument("--pooling_cls_token", action="store_true")

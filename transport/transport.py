@@ -194,7 +194,7 @@ class Transport:
 
         t = t.to(x1)
         
-        if self.time_dist_shift != 1.0:
+        if self.time_dist_shift > 1.0:
             t = 1 - self.time_dist_shift * t / (1 + (self.time_dist_shift - 1) * t)
             
         return t, x0, x1
