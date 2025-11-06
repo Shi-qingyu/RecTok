@@ -1362,38 +1362,29 @@ class DeTok(nn.Module):
         else:
             posteriors = self.to_posteriors(z)
             z_latents = posteriors.sample() if sampling else posteriors.mean
+            
         z_latents_aux = z_latents
 
         if self.training and self.gamma > 0.0:
             device = z_latents.device
             bsz, n_tokens, chans = z_latents.shape
+            noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
 
-            if self.noise_schedule == "lognorm":
-            # Sample noise level using logit normal distribution for better control
-            # Generate from normal distribution and apply sigmoid to get values in (0,1)
-                normal_samples = torch.randn(bsz, 1, 1, device=device)
-                noise_level_tensor = torch.sigmoid(normal_samples)
-            elif self.noise_schedule == "shift":
-                noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
-                noise_level_tensor = self.timestep_shift * noise_level_tensor / (1 + (self.timestep_shift - 1) * noise_level_tensor)
-            elif self.noise_schedule == "uniform":
-                noise_level_tensor = torch.rand(bsz, 1, 1, device=device)
-            
-            noise_level_tensor_clean = torch.rand(bsz, 1, 1, device=device)
-                
             # noise_level_tensor = noise_level_tensor.expand(-1, n_tokens, chans)
             noise = torch.randn(bsz, n_tokens, chans, device=device) * self.gamma
-            z_latents = (1 - noise_level_tensor_clean) * z_latents + noise_level_tensor_clean * noise
+            z_latents = (1 - noise_level_tensor) * z_latents + noise_level_tensor * noise
+
+            if self.noise_schedule == "lognorm":
+                normal_samples = torch.randn(bsz, 1, 1, device=device)
+                noise_level_tensor_aux = torch.sigmoid(normal_samples)
+            elif self.noise_schedule == "shift":
+                noise_level_tensor_aux = torch.rand(bsz, 1, 1, device=device)
+                noise_level_tensor_aux = self.timestep_shift * noise_level_tensor / (1 + (self.timestep_shift - 1) * noise_level_tensor)
+            else:
+                noise_level_tensor_aux = noise_level_tensor
                 
             if self.aux_input_type == "noisy":
-                z_latents_aux = (1 - noise_level_tensor) * z_latents + noise_level_tensor * noise
-
-        if self.channel_drop > 0.0 and self.training:
-            bsz, n_tokens, chans = z_latents.shape
-            ch_mask = (torch.rand(bsz, 1, chans, device=z_latents.device) > self.channel_drop).float()
-            scale = 1.0 / (1.0 - self.channel_drop + 1e-8)
-            z_latents     = z_latents     * ch_mask * scale
-            z_latents_aux = z_latents_aux * ch_mask * scale
+                z_latents_aux = (1 - noise_level_tensor_aux) * z_latents_aux + noise_level_tensor_aux * noise
 
         ret = dict(
             z_latents=z_latents,
