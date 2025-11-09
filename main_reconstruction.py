@@ -132,8 +132,9 @@ def main(args: argparse.Namespace) -> int:
     total_time = int(time.time() - start_time + args.last_elapsed_time)
     logger.info(f"Training time {str(datetime.timedelta(seconds=total_time))}")
 
-    for use_ema in [False, True]:
-        evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
+    if args.evaluate_when_finish:
+        for use_ema in [False, True]:
+            evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
 
     return 0
 
@@ -219,6 +220,7 @@ def get_args_parser():
     parser.add_argument("--keep_eval_folder", action="store_true")
     parser.add_argument("--evaluate", action="store_true")
     parser.add_argument("--eval_bsz", type=int, default=256)
+    parser.add_argument("--evaluate_when_finish", action="store_true")
 
     # optimization parameters
     parser.add_argument("--lr", type=float, default=None)
