@@ -261,8 +261,7 @@ class DiTwDDTHead(nn.Module):
         assert guid_t_min < guid_t_max, "cfg_interval should be (min, max) with min < max"
         t = t[: len(t) // 2] # get t for the conditional half
         half_eps = torch.where(
-            ((t >= guid_t_min) & (t <= guid_t_max)
-             ).view(-1, *[1] * (len(cond_eps.shape) - 1)),
+            ((t >= guid_t_min) & (t <= guid_t_max)).view(-1, *[1] * (len(cond_eps.shape) - 1)),
             uncond_eps + cfg_scale * (cond_eps - uncond_eps), cond_eps
         )
         eps = torch.cat([half_eps, half_eps], dim=0)
@@ -308,7 +307,7 @@ class DiTwDDTHead(nn.Module):
             z = torch.cat([z, z], 0)
             y_null = torch.tensor([self.num_classes] * n_samples, device=device)
             labels = torch.cat([labels, y_null], 0)
-            model_kwargs = dict(y=labels, cfg_scale=cfg, cfg_interval=(0, 1))
+            model_kwargs = dict(y=labels, cfg_scale=cfg, cfg_interval=(0, 1.0))
             model_fn = self.forward_with_cfg
         else:
             model_kwargs = dict(y=labels)
@@ -321,13 +320,13 @@ class DiTwDDTHead(nn.Module):
         return samples
 
 
-def DiTwDDTHead_b(**kwargs):
+def DiTwDDTHead_s(**kwargs):
     logger.info(f"DiTwDDTHead_b kwargs: {kwargs}")
     return DiTwDDTHead(
         img_size=kwargs.get("img_size", 256),
         patch_size=kwargs.get("patch_size", [1, 1]),
         tokenizer_patch_size=kwargs.get("tokenizer_patch_size", 16),
-        token_channels=kwargs.get("token_channels", 768),
+        token_channels=kwargs.get("token_channels", 128),
         hidden_size=kwargs.get("hidden_size", [384, 2048]),
         depth=kwargs.get("depth", [12, 2]),
         num_heads=kwargs.get("num_heads", [6, 16]),
@@ -372,6 +371,6 @@ def DiTwDDTHead_xl(**kwargs):
 
 
 DiTDDT_models = {
-    "DiTDDT_b": DiTwDDTHead_b,
+    "DiTDDT_s": DiTwDDTHead_s,
     "DiTDDT_xl": DiTwDDTHead_xl,
 }
