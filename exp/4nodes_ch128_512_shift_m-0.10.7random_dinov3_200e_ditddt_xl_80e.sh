@@ -39,7 +39,7 @@ vit_aux_model_size="tiny"
 noise_schedule="shift"  # lognorm, shift, uniform
 
 exp_name="detokBB${pretrained_model_name_or_path}-img${image_size}-ch${token_channels}-p${patch_size}-g${gamma}${noise_schedule}-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}"
-exp_name="${exp_name}-aux${aux_model_type}${aux_dec_type}${vit_aux_model_size}${aux_input_type}${aux_target}-11-03"
+exp_name="${exp_name}-aux${aux_model_type}${aux_dec_type}${vit_aux_model_size}${aux_input_type}${aux_target}-11-19"
 
 # add variable
 export MASTER_ADDR=${ARNOLD_WORKER_0_HOST}
