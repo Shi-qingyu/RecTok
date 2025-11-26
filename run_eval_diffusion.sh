@@ -1,9 +1,13 @@
 tokenizer_project=tokenizer_training
-tokenizer_exp_name=detokBB-ch768-p16-wokl-g3.0lognorm-m-0.10.7random-auxdinov3transformernoisyalign
+tokenizer=detok_BB
+token_channels=128
+
+tokenizer_exp_name=detokBB-ch256-p16-g3.0uniform-m-0.10.7random-auxdinov3transformertinynoisyalign-11-10
 num_register_tokens=0
 
 force_one_d_seq=0
-exp_name=LightningDiT_base-${tokenizer_exp_name}
+exp_name=ditddt_xl-${tokenizer_exp_name}
+load_from=work_dirs/gen_model_training/$exp_name/checkpoints/epoch_0079.pth
 
 project=gen_model_training
 batch_size=128
@@ -22,22 +26,28 @@ torchrun \
     --nnodes="${WORLD_SIZE:-1}" \
     --node_rank="${RANK:-0}" \
     --master_addr="${MASTER_ADDR:-127.0.0.1}" \
-    --master_port="${MASTER_PORT:-29500}" \
+    --master_port="${MASTER_PORT:-29501}" \
     main_diffusion.py \
-    --project $project --exp_name $exp_name --auto_resume \
-    --batch_size $batch_size --epochs $epochs --use_aligned_schedule \
+    --project $project --exp_name $exp_name \
+    --batch_size $batch_size --epochs $epochs \
     --pretrained_model_name_or_path "" \
-    --token_channels 16 \
-    --disable_kl \
+    --token_channels $token_channels \
     --num_register_tokens $num_register_tokens \
-    --tokenizer detok_BB --use_ema_tokenizer --collect_tokenizer_stats \
-    --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl \
+    --tokenizer $tokenizer \
+    --use_ema_tokenizer \
+    --collect_tokenizer_stats --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl \
     --load_tokenizer_from work_dirs/tokenizer_training/$tokenizer_exp_name/checkpoints/epoch_0199.pth \
-    --model LightningDiT_base \
+    --load_from $load_from \
+    --model DiTDDT_xl \
+    --ditdh_sched \
     --force_one_d_seq $force_one_d_seq \
-    --num_sampling_steps 250 --cfg 1.3 \
-    --cfg_list 1.6 \
-    --online_eval --eval_freq 10 \
+    --num_sampling_steps 50 \
+    --cfg_list 1.0 \
     --evaluate \
-    --vis_freq 50 --eval_bsz 256 \
-    --data_path ./data/imagenet/train
+    --eval_bsz 256 \
+    --num_images 50000 \
+    --data_path ./data/imagenet/train \
+    --keep_eval_folder \
+    --use_auto_guidance \
+    --auto_guidance_model DiTDDT_s \
+    --load_auto_guidance_from work_dirs/gen_model_training/ditddt_s-${tokenizer_exp_name}/checkpoints/epoch_0029.pth \

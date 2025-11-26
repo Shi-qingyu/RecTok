@@ -1,16 +1,16 @@
 tokenizer_project=tokenizer_training
 tokenizer=detok_BB
-tokenizer_exp_name=detokBB-ch768-p16-wokl-g3.0lognorm-m-0.10.7random-auxdinov3transformernoisyalign
+tokenizer_exp_name=detokBB-ch128-p16-g1.0shift-m-0.10.6random-auxdinov3btransformertinynoisy1.0align
 num_register_tokens=0
-token_channels=768
+token_channels=128
 
 force_one_d_seq=0
 exp_name=ditddt_xl-${tokenizer_exp_name}
 
 project=gen_model_training
 model=DiTDDT_xl
-batch_size=32
-epochs=100
+batch_size=128
+epochs=80
 
 GPUS_PER_NODE=${GPUS_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')}
 GPUS_PER_NODE=${GPUS_PER_NODE:-1}
@@ -36,7 +36,6 @@ torchrun \
     --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl \
     --load_tokenizer_from work_dirs/tokenizer_training/$tokenizer_exp_name/checkpoints/latest.pth \
     --model $model \
-    --disable_kl \
     --force_one_d_seq $force_one_d_seq \
     --lr 2e-4 \
     --min_lr 2e-5 \
@@ -45,10 +44,11 @@ torchrun \
     --weight_decay 0.0 \
     --ema_rate 0.9995 \
     --ditdh_sched \
+    --milestone_interval 5 \
     --warmup_start_epoch 40 \
     --warmup_end_epoch 800 \
-    --num_sampling_steps 50 --cfg 1.6 \
-    --cfg_list 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 \
+    --num_sampling_steps 50 --cfg 1.0 \
+    --cfg_list 1.0 \
     --online_eval --eval_freq 10 \
     --vis_freq 50 --eval_bsz 256 \
     --data_path ./data/imagenet/train

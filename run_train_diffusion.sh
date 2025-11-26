@@ -1,16 +1,17 @@
 tokenizer_project=tokenizer_training
-tokenizer=detok_BB
+tokenizer=sd3vae
 pretrained_model_name_or_path=""
-tokenizer_exp_name=detokBB-ch768-p16-g3.0lognorm-m0.00.0fix-auxdinov3transformernoisyalign1.0cls-200e-2025-10-17
+tokenizer_exp_name=sd3vae
 num_register_tokens=0
-token_channels=768
+token_channels=16
+tokenizer_patch_size=8
 
 force_one_d_seq=0
-exp_name=ditddt_b-${tokenizer_exp_name}
+exp_name=sit_b-${tokenizer_exp_name}
 
 project=gen_model_training
-model=DiTDDT_b
-batch_size=128
+model=SiT_base
+batch_size=64
 epochs=100
 
 GPUS_PER_NODE=${GPUS_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')}
@@ -33,15 +34,12 @@ torchrun \
     --pretrained_model_name_or_path "${pretrained_model_name_or_path}" \
     --num_register_tokens $num_register_tokens \
     --token_channels $token_channels \
-    --aux_cls_token \
-    --tokenizer $tokenizer --use_ema_tokenizer \
-    --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl --collect_tokenizer_stats \
-    --load_tokenizer_from work_dirs/tokenizer_training/$tokenizer_exp_name/checkpoints/epoch_0199.pth \
+    --tokenizer_patch_size $tokenizer_patch_size \
+    --tokenizer $tokenizer \
     --model $model \
-    --disable_kl \
     --force_one_d_seq $force_one_d_seq \
     --num_sampling_steps 250 --cfg 1.6 \
-    --cfg_list 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 \
+    --cfg_list 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 \
     --online_eval --eval_freq 10 \
     --vis_freq 50 --eval_bsz 256 \
     --data_path ./data/imagenet/train

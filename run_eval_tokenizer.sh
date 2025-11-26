@@ -3,11 +3,11 @@ batch_size=64
 data_path=./data/imagenet/train
 model=detok_BB
 img_size=256
-token_channels=768
+token_channels=128
 patch_size=16
 pretrained_model_name_or_path=""
 num_register_tokens=0
-exp_name="detokBB-ch768-p16-g3.0lognorm-m0.00.0fix-auxdinov3transformernoisyalign1.0cls-200e-2025-10-17"
+exp_name="detokBB-img256-ch128-p16-g1.0shift-m-0.10.5random-auxdinov3transformertinynoisy1.0align"
 load_from="work_dirs/tokenizer_training/${exp_name}/checkpoints/epoch_0199.pth"
 
 GPUS_PER_NODE=${GPUS_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')}
@@ -28,12 +28,10 @@ torchrun \
   --project "${project}" --exp_name "${exp_name}" \
   --batch_size "${batch_size}" --model "${model}" \
   --token_channels "${token_channels}" \
-  --aux_cls_token \
   --img_size "${img_size}" \
   --patch_size "${patch_size}" \
   --pretrained_model_name_or_path "${pretrained_model_name_or_path}" \
   --num_register_tokens "${num_register_tokens}" \
-  --online_eval \
   --load_from "${load_from}" \
   --evaluate \
   --eval_bsz 256 \
