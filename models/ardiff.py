@@ -69,6 +69,7 @@ class ARDiff(nn.Module):
         self.seq_len = self.seq_h * self.seq_w + 1  # +1 for BOS token
         self.token_embed_dim = token_channels * patch_size**2
 
+
         if force_one_d_seq:
             self.seq_len = force_one_d_seq + 1
 

@@ -93,7 +93,7 @@ def main(args):
     # Configuration
     base_dir = args.base_dir
     repo_id = args.repo_id
-    token = "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"  # Set to your HF token if needed, or use HF CLI login
+    token = args.token  # Set to your HF token if needed, or use HF CLI login
     
     # Create temporary directory for zip files
     temp_zip_dir = "temp_zips"
