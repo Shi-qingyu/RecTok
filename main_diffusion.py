@@ -238,7 +238,7 @@ def get_args_parser():
     parser.add_argument("--output_dir", default="./work_dirs")
     parser.add_argument("--print_freq", type=int, default=100)
     parser.add_argument("--eval_freq", type=int, default=40)
-    parser.add_argument("--vis_freq", type=int, default=10)
+    parser.add_argument("--vis_freq", type=int, default=100)
     parser.add_argument("--save_freq", type=int, default=1)
     parser.add_argument("--last_elapsed_time", type=float, default=0.0)
 

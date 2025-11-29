@@ -138,8 +138,8 @@ torchrun \
     --warmup_start_epoch 40 \
     --warmup_end_epoch 800 \
     --milestone_interval 80 \
-    --num_sampling_steps 50 --cfg 1.6 \
-    --cfg_list 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 \
+    --num_sampling_steps 50 --cfg 1.0 \
+    --cfg_list 1.0 \
     --keep_eval_folder \
-    --vis_freq 50 --eval_bsz 256 \
+    --eval_bsz 256 \
     --data_path ./data/imagenet/train
