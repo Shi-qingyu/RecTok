@@ -34,7 +34,6 @@ def compress_folder(folder_path, output_zip_path):
 
     print(f"Successfully compressed to {output_zip_path}")
     
-    print(f"Successfully compressed to {output_zip_path}")
 
 
 def get_existing_files(repo_id, token=None):
@@ -93,7 +92,7 @@ def main(args):
     # Configuration
     base_dir = args.base_dir
     repo_id = args.repo_id
-    token = args.token  # Set to your HF token if needed, or use HF CLI login
+    token = args.token
     
     # Create temporary directory for zip files
     temp_zip_dir = "temp_zips"
