@@ -155,7 +155,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_dir", type=str, default="work_dirs/tokenizer_training")
     parser.add_argument("--repo_id", type=str, default="QingyuShi/SemanticTok")
-    parser.add_argument("--token", type=str, default="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")
+    parser.add_argument("--token", type=str, default="")
     args = parser.parse_args()
     base_dir = args.base_dir
     repo_id = args.repo_id
