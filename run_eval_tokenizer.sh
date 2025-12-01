@@ -7,7 +7,7 @@ token_channels=128
 patch_size=16
 pretrained_model_name_or_path=""
 num_register_tokens=0
-exp_name="detokBB-img256-ch128-p16-g1.0shift-m-0.10.5random-auxdinov3transformertinynoisy1.0align"
+exp_name="$1"
 load_from="work_dirs/tokenizer_training/${exp_name}/checkpoints/epoch_0199.pth"
 
 GPUS_PER_NODE=${GPUS_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')}
