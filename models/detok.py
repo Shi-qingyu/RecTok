@@ -1377,7 +1377,13 @@ class DeTok(nn.Module):
 
                 if model_type == "dinov2":
                     x_dino = transforms(x_aux)
-                    x_dino = F.interpolate(x_dino, size=(224, 224), mode='bilinear', align_corners=False)
+                    dino_img_size = self.img_size / self.patch_size * 14   # DINOv2 uses patch size 14
+                    x_dino = F.interpolate(
+                        x_dino, 
+                        size=(dino_img_size, dino_img_size), 
+                        mode='bilinear', 
+                        align_corners=False
+                    )
                     x_dino = x_dino.to(dtype=x.dtype)
                     with torch.inference_mode():
                         if self.cls_token_type != "none":
@@ -1444,12 +1450,12 @@ class DeTok(nn.Module):
                 
                 pred_aux_feature = aux_decoder(aux_input, ids_restore=ids_restore)
                 
-                if aux_feature.shape[1] != pred_aux_feature.shape[1]:
-                    bsz, seq_len, dim = aux_feature.shape
-                    aux_feature_h = int(seq_len ** 0.5)
-                    aux_feature = aux_feature.reshape(bsz, aux_feature_h, aux_feature_h, dim).permute(0, 3, 1, 2)
-                    aux_feature = F.interpolate(aux_feature, size=(self.seq_h, self.seq_w), mode='bilinear', align_corners=False)
-                    aux_feature = aux_feature.permute(0, 2, 3, 1).reshape(bsz, self.seq_h * self.seq_w, dim)
+                # if aux_feature.shape[1] != pred_aux_feature.shape[1]:
+                #     bsz, seq_len, dim = aux_feature.shape
+                #     aux_feature_h = int(seq_len ** 0.5)
+                #     aux_feature = aux_feature.reshape(bsz, aux_feature_h, aux_feature_h, dim).permute(0, 3, 1, 2)
+                #     aux_feature = F.interpolate(aux_feature, size=(self.seq_h, self.seq_w), mode='bilinear', align_corners=False)
+                #     aux_feature = aux_feature.permute(0, 2, 3, 1).reshape(bsz, self.seq_h * self.seq_w, dim)
 
                 if self.aux_target == "reconstruction":
                     if ids_masked.shape[1] > 0:
