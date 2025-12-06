@@ -1084,6 +1084,8 @@ class DeTok(nn.Module):
         )
 
         # model configuration
+        self.img_size = img_size
+        self.patch_size = patch_size
         self.seq_h = img_size // patch_size
         self.seq_w = self.seq_h
         self.width = self.encoder.width
@@ -1388,7 +1390,7 @@ class DeTok(nn.Module):
                     inputs = transforms(x_dinov3, return_tensors="pt").to(x.device)
                     inputs["pixel_values"] = F.interpolate(
                         inputs["pixel_values"],
-                        size=(256, 256), 
+                        size=(self.img_size, self.img_size), 
                         mode="bilinear", 
                         align_corners=False
                     )

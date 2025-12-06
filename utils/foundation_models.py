@@ -37,7 +37,7 @@ def create_foundation_model(model_type: str = "dinov2"):
             logger.info(f"[Foundation Model] Loaded foundation model DINOv2 from timm")
 
     elif model_type == "dinov3":
-        ckpt_path = os.path.join("offline_models", "dinov3_vit_large_patch14")
+        ckpt_path = os.path.join("offline_models", "dinov3_vit_large_patch16")
 
         if os.path.exists(ckpt_path):
             transforms = AutoImageProcessor.from_pretrained(ckpt_path)
@@ -55,7 +55,7 @@ def create_foundation_model(model_type: str = "dinov2"):
         return foundation_model, transforms
 
     elif model_type == "dinov3b":
-        ckpt_path = os.path.join("offline_models", "dinov3_vit_base_patch14")
+        ckpt_path = os.path.join("offline_models", "dinov3_vit_base_patch16")
 
         if os.path.exists(ckpt_path):
             transforms = AutoImageProcessor.from_pretrained(ckpt_path)
