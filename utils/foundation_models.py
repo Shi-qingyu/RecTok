@@ -15,7 +15,7 @@ from transformers import (
 
 import models
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def create_foundation_model(model_type: str = "dinov2"):

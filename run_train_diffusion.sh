@@ -1,6 +1,6 @@
 tokenizer_project=tokenizer_training
-tokenizer=detok_BB
-tokenizer_exp_name=detokBB-ch128-p16-g1.0shift-m-0.10.6random-auxdinov3btransformertinynoisy1.0align
+tokenizer=rectok_BB
+tokenizer_exp_name=rectokBB-ch128-p16-g1.0shift-m-0.10.6random-auxdinov3btransformertinynoisy1.0align
 num_register_tokens=0
 token_channels=128
 
@@ -44,7 +44,7 @@ torchrun \
     --weight_decay 0.0 \
     --ema_rate 0.9995 \
     --ditdh_sched \
-    --milestone_interval 5 \
+    --milestone_interval 80 \
     --warmup_start_epoch 40 \
     --warmup_end_epoch 800 \
     --num_sampling_steps 50 --cfg 1.0 \

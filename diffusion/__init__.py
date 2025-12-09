@@ -9,7 +9,7 @@ import logging
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def create_diffusion(

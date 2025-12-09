@@ -10,7 +10,7 @@ from .diffloss import DiffLoss
 from .layers import Block, Transformer, modulate
 from .model_utils import SIZE_DICT
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 class FinalLayer(nn.Module):

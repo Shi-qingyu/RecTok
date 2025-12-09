@@ -14,7 +14,7 @@ from torch import inf
 
 import utils.distributed as dist
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def fix_random_seeds(seed=31):

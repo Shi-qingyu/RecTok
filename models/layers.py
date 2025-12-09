@@ -17,7 +17,7 @@ from einops import rearrange, repeat
 from torch import Tensor
 from torch.utils.checkpoint import checkpoint
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def to_2tuple(x):

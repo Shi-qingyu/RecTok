@@ -13,7 +13,7 @@ import torch as th
 
 from .diffusion_utils import discretized_gaussian_log_likelihood, normal_kl
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def mean_flat(tensor):

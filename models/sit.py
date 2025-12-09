@@ -26,7 +26,7 @@ from .layers import (
 )
 from .model_utils import SIZE_DICT
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 class SiT(nn.Module):

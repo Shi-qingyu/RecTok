@@ -12,13 +12,13 @@ import torch.nn.functional as F
 from diffusers.models import AutoencoderKL as DiffusersAutoencoderKLBackbone
 from einops import rearrange
 
-from models.detok import TransformerDecoder, MLPDecoder
+from models.rectok import TransformerDecoder, MLPDecoder
 from models.gaussian import DiagonalGaussianDistribution
 from utils.foundation_models import create_foundation_model
 
 from utils.loader import CONSTANTS
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def nonlinearity(x):  # swish

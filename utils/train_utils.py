@@ -3,6 +3,7 @@ import datetime
 import json
 import logging
 import os
+import shutil
 import pickle as pkl
 import time
 from typing import Any
@@ -29,7 +30,7 @@ from utils.builders import create_auto_guidance_model
 
 tqdm = partial(tqdm, dynamic_ncols=True)
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def setup(args: argparse.Namespace):
@@ -238,11 +239,9 @@ def train_one_epoch_tokenizer(
 
             if isinstance(result_dict, dict):
                 posteriors = result_dict.get("posteriors", None)
-                z_latents = result_dict.get("z_latents", None)
                 ids_restore = result_dict.get("ids_restore", None)
-                vf_feature = result_dict.get("vf_feature", None)
-                aux_features = result_dict.get("aux_features", None)
-                pred_aux_features = result_dict.get("pred_aux_features", None)
+                sem_features = result_dict.get("sem_features", None)
+                pred_sem_features = result_dict.get("pred_sem_features", None)
             else:
                 raise ValueError(f"Invalid result_dict type: {type(result_dict)}")
                 
@@ -258,10 +257,8 @@ def train_one_epoch_tokenizer(
                 reconstructions=reconstructions, 
                 epoch=epoch,
                 posteriors=posteriors,
-                z_latents=z_latents,
-                vf_feature=vf_feature,
-                aux_features=aux_features,
-                pred_aux_features=pred_aux_features,
+                sem_features=sem_features,
+                pred_sem_features=pred_sem_features,
                 mode="generator",
             )
             
@@ -619,6 +616,18 @@ def evaluate_generator(
     )
     gen_time, save_time, gen_cnt = 0, 0, 0
     gen_start = time.perf_counter()
+    
+    if not os.path.exists(args.fid_stats_path):
+        reference_folder = f"data/imagenet/gt-image50000-{args.img_size}"
+        if os.path.exists(reference_folder) and len(os.listdir(reference_folder)) == 50000:
+            if rank == 0:
+                logger.info(
+                    f"Computing mu and sigma based on {reference_folder}"
+                )
+            else:
+                reference_folder = None
+    else:
+        reference_folder = None
 
     for cur_idx in trange(n_batches, desc=f"Rank{rank}", position=rank):
         # get the start and end indices for this batch
@@ -652,6 +661,7 @@ def evaluate_generator(
             Image.fromarray(sample).save(f"{eval_dir}/{global_index:06d}.png")
         save_time += time.perf_counter() - start_time
         del samples
+        
         torch.cuda.empty_cache()
 
     # synchronize across processes
@@ -678,7 +688,7 @@ def evaluate_generator(
 
     torch.distributed.barrier()
     if rank == 0:
-        metrics_dict = evaluate_FID(eval_dir, None, fid_stats_path=args.fid_stats_path)
+        metrics_dict = evaluate_FID(eval_dir, reference_folder, fid_stats_path=args.fid_stats_path)
         fid = metrics_dict["frechet_inception_distance"]
         inception_score = metrics_dict["inception_score_mean"]
         if wandb_logger is not None:
@@ -769,6 +779,22 @@ def evaluate_tokenizer(
     logger.info(f"Reconstructing images for evaluation, EMA={use_ema}")
     logger.info(f"World size: {world_size}, Rank: {rank}, Batches: {n_batches}, Bsz: {per_gpu_bsz}")
 
+    if not os.path.exists(args.fid_stats_path):
+        reference_folder = f"data/imagenet/gt-image50000-{args.img_size}"
+        if os.path.exists(reference_folder):
+            if len(os.listdir(reference_folder)) == 50000:
+                save_gt = False
+            else:
+                if rank == 0:
+                    # remove dir
+                    shutil.rmtree(reference_folder)
+                    os.makedirs(reference_folder, exist_ok=True)
+                torch.distributed.barrier()
+                save_gt = True
+    else:
+        reference_folder = None
+        save_gt = False
+
     recon_time, save_time, cnt = 0, 0, 0
     psnr_values_local, img_ids_local = [], []
 
@@ -819,15 +845,16 @@ def evaluate_tokenizer(
         for i, sample_np in enumerate(reconstructed_uint8):
             global_index = img_ids[i].item()
             Image.fromarray(sample_np).save(f"{eval_dir}/{global_index:06d}.png")
+            
         # save gt
-        # gt_images = data_dict["img"]
-        # gt_images = gt_images * 0.5 + 0.5
-        # gt_images = (gt_images * 255.0).clamp(0, 255).to(torch.uint8)
-        # gt_images = gt_images.permute(0, 2, 3, 1).cpu().numpy()
-        # os.makedirs("data/imagenet/gt-image50000", exist_ok=True)
-        # for i, sample_np in enumerate(gt_images):
-        #     global_index = img_ids[i].item()
-        # Image.fromarray(sample_np).save(f"data/imagenet/gt-image50000/{global_index:06d}.png")
+        if save_gt:
+            gt_images = data_dict["img"]
+            gt_images = gt_images * 0.5 + 0.5
+            gt_images = (gt_images * 255.0).clamp(0, 255).to(torch.uint8)
+            gt_images = gt_images.permute(0, 2, 3, 1).cpu().numpy()
+            for i, sample_np in enumerate(gt_images):
+                global_index = img_ids[i].item()
+            Image.fromarray(sample_np).save(f"{reference_folder}/{global_index:06d}.png")
 
         save_time += time.perf_counter() - start_time
 
@@ -877,7 +904,7 @@ def evaluate_tokenizer(
 
     # Evaluate FID
     if rank == 0:
-        metrics_dict = evaluate_FID(eval_dir, fid_stats_path=args.fid_stats_path)
+        metrics_dict = evaluate_FID(eval_dir, reference_folder, fid_stats_path=args.fid_stats_path)
         fid = metrics_dict["frechet_inception_distance"]
         inception_score = metrics_dict["inception_score_mean"]
         if wandb_logger is not None:

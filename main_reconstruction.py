@@ -29,7 +29,7 @@ torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.deterministic = False
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def main(args: argparse.Namespace) -> int:
@@ -46,8 +46,6 @@ def main(args: argparse.Namespace) -> int:
     model, ema_model = create_reconstruction_model(args)
     if args.train_decoder_only and hasattr(model, "freeze_everything_but_decoder"):
         model.freeze_everything_but_decoder()
-    if args.freeze_encoder and hasattr(model, "freeze_encoder"):
-        model.freeze_encoder()
 
     optimizer, loss_scaler = create_optimizer_and_scaler(args, model)
     loss_fn = create_loss_module(args)
@@ -69,8 +67,7 @@ def main(args: argparse.Namespace) -> int:
     )
 
     # initial visualization
-    if not args.aux_decoder_only:
-        visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), args.start_epoch)
+    visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), args.start_epoch)
 
     if args.vis_only:
         return 0
@@ -117,7 +114,7 @@ def main(args: argparse.Namespace) -> int:
             torch.distributed.barrier()
 
         # periodic visualization
-        if (epoch + 1) % args.vis_freq == 0 and not args.aux_decoder_only:
+        if (epoch + 1) % args.vis_freq == 0 and not args.sem_decoder_only:
             visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), epoch)
 
         # online evaluation
@@ -152,36 +149,26 @@ def get_args_parser():
     parser.add_argument("--token_channels", default=16, type=int)
     parser.add_argument("--img_size", default=256, type=int)
     parser.add_argument("--patch_size", default=16, type=int)
-    parser.add_argument("--pretrained_model_name_or_path", default="", type=str)
-    parser.add_argument("--frozen_dinov3", action="store_true")
-    parser.add_argument("--num_register_tokens", default=0, type=int)
-    parser.add_argument("--diff_cls_token", action="store_true")
+    parser.add_argument("--encoder_type", default="encoder", type=str)
     parser.add_argument("--disable_kl", action="store_true")
-    parser.add_argument("--aux_decoder_only", action="store_true")
-    parser.add_argument("--channel_drop", default=0.0, type=float)
-    parser.add_argument("--low_rank_space", action="store_true")
     parser.add_argument("--use_qknorm", action="store_true")
     
-    parser.add_argument("--mask_ratio", default=0.0, type=float)
+    # sem decoder parameters
+    parser.add_argument("--mask_ratio", default=0.4, type=float)
     parser.add_argument("--mask_ratio_min", default=-0.1, type=float)
     parser.add_argument("--mask_ratio_type", default="random", type=str)
-    parser.add_argument("--use_skip_connection", action="store_true")
-    parser.add_argument("--last_layer_feature", action="store_true")
-    parser.add_argument("--gamma", default=0.0, type=float, help="noise standard deviation for training")
-    parser.add_argument("--use_additive_noise", action="store_true")
-    parser.add_argument("--noise_schedule", default="uniform", type=str)
-    
-    parser.add_argument("--aux_model_type", default="", type=str)
-    parser.add_argument("--aux_dec_type", default="transformer", type=str)
-    parser.add_argument("--vit_aux_model_size", default="tiny", type=str)
-    parser.add_argument("--use_adaptive_channels", action="store_true")
-    parser.add_argument("--aux_input_type", default="noisy", type=str)
-    parser.add_argument("--aux_target", default="reconstruction", type=str)
+    parser.add_argument("--gamma", default=1.0, type=float, help="noise standard deviation for training")
+    parser.add_argument("--noise_schedule", default="shift", type=str)
+    parser.add_argument("--foundation_model_type", default="dinov3", type=str)
+    parser.add_argument("--sem_dec_type", default="transformer", type=str)
+    parser.add_argument("--vit_sem_model_size", default="tiny", type=str)
+    parser.add_argument("--sem_input_type", default="noisy", type=str)
+    parser.add_argument("--sem_target", default="rec+align", type=str)
     parser.add_argument("--cls_token_type", default="none", type=str)
+    parser.add_argument("--diff_cls_token", action="store_true")
 
     parser.add_argument("--no_load_ckpt", action="store_true")
     parser.add_argument("--train_decoder_only", action="store_true")
-    parser.add_argument("--freeze_encoder", action="store_true")
     parser.add_argument("--vis_only", action="store_true")
 
     # loss parameters
@@ -191,9 +178,8 @@ def get_args_parser():
     parser.add_argument("--discriminator_start_epoch", default=20, type=int)
     parser.add_argument("--discriminator_weight", default=0.5, type=float)
     parser.add_argument("--kl_loss_weight", default=1e-6, type=float)
-    parser.add_argument("--vf_loss_weight", default=0.1, type=float)
-    parser.add_argument("--aux_loss_type", default="cosine", type=str)
-    parser.add_argument("--aux_loss_weight", default=1.0, type=float)
+    parser.add_argument("--sem_loss_type", default="cosine", type=str)
+    parser.add_argument("--sem_loss_weight", default=1.0, type=float)
 
     # logging parameters
     parser.add_argument("--output_dir", default="./work_dirs")
@@ -209,7 +195,6 @@ def get_args_parser():
     parser.add_argument("--load_from", type=str, default=None, help="load from pretrained model")
     parser.add_argument("--keep_n_ckpts", default=1, type=int, help="keep the last n checkpoints")
     parser.add_argument("--milestone_interval", default=100, type=int, help="keep checkpoints every n epochs")
-
 
     # evaluation parameters
     parser.add_argument("--num_images", default=50000, type=int, help="Number of images to evaluate on")

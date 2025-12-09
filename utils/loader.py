@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 from torchvision.datasets.folder import default_loader
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 CONSTANTS = {
     # vavae latent statistics from  https://huggingface.co/hustvl/vavae-imagenet256-f16d32-dinov2/blob/main/latents_stats.pt

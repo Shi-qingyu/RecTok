@@ -16,7 +16,7 @@ from .layers import (
 from transport import Sampler, create_transport
 
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 class DiTwDDTHead(nn.Module):

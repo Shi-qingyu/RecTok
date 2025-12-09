@@ -12,7 +12,7 @@ import utils.losses as losses
 from utils.loader import ListDataset, center_crop_arr
 from utils.misc import NativeScalerWithGradNormCount
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def create_train_dataloader(args, should_flip=True, batch_size=-1, return_path=False, drop_last=True):
@@ -131,24 +131,16 @@ def create_generation_model(args):
     if args.tokenizer is not None:
         if args.tokenizer in models.VAE_models:
             tokenizer: nn.Module = models.VAE_models[args.tokenizer]()
-        elif args.tokenizer in models.DeTok_models:
-            tokenizer: nn.Module = models.DeTok_models[args.tokenizer](
+        elif args.tokenizer in models.RecTok_models:
+            tokenizer: nn.Module = models.RecTok_models[args.tokenizer](
                 img_size=args.img_size,
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
                 gamma=0.0,
                 mask_ratio=0.0,
-                pretrained_model_name_or_path=getattr(args, "pretrained_model_name_or_path", ""),
-                num_register_tokens=getattr(args, "num_register_tokens", 0),
-                use_skip_connection=getattr(args, "use_skip_connection", False),
-                aux_cls_token=getattr(args, "aux_cls_token", False),
-                diff_cls_token=getattr(args, "diff_cls_token", False),
-                pooling_cls_token=getattr(args, "pooling_cls_token", False),
-                disable_kl=getattr(args, "disable_kl", False),
-                low_rank_space=getattr(args, "low_rank_space", False),
             )
-        elif args.tokenizer in models.DeAE_models:
-            tokenizer: nn.Module = models.DeAE_models[args.tokenizer](
+        elif args.tokenizer in models.DeTok_models:
+            tokenizer: nn.Module = models.DeTok_models[args.tokenizer](
                 img_size=args.img_size,
                 patch_size=args.tokenizer_patch_size,
                 token_channels=args.token_channels,
@@ -286,14 +278,24 @@ def create_reconstruction_model(args):
         model = models.VAE_models[args.model](
             resolution=args.img_size,
             embed_dim=args.token_channels,
-            gamma=getattr(args, "gamma", 3.0),
-            aux_model_type=getattr(args, "aux_model_type", ""),
-            aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
-            aux_model_size=getattr(args, "aux_model_size", "tiny"),
-            aux_input_type=getattr(args, "aux_input_type", "noisy"),
-            aux_cls_token=getattr(args, "aux_cls_token", False),
-            diff_cls_token=getattr(args, "diff_cls_token", False),
             ckpt=getattr(args, "ckpt", None),
+        )
+    elif args.model in models.RecTok_models:
+        model = models.RecTok_models[args.model](
+            img_size=args.img_size,
+            patch_size=args.patch_size,
+            token_channels=args.token_channels,
+            encoder_type=getattr(args, "encoder_type", "encoder"),
+            mask_ratio=getattr(args, "mask_ratio", 0.4),
+            mask_ratio_min=getattr(args, "mask_ratio_min", -0.1),
+            mask_ratio_type=getattr(args, "mask_ratio_type", "random"),
+            gamma=getattr(args, "gamma", 1.0),
+            noise_schedule=getattr(args, "noise_schedule", "shift"),
+            foundation_model_type=getattr(args, "foundation_model_type", "dinov3"),
+            sem_dec_type=getattr(args, "sem_dec_type", "transformer"),
+            sem_target=getattr(args, "sem_target", "rec+align"),
+            sem_input_type=getattr(args, "sem_input_type", "noisy"),
+            vit_sem_model_size=getattr(args, "vit_sem_model_size", "tiny"),
         )
     elif args.model in models.DeTok_models:
         model = models.DeTok_models[args.model](
@@ -302,33 +304,6 @@ def create_reconstruction_model(args):
             token_channels=args.token_channels,
             mask_ratio=getattr(args, "mask_ratio", 0.7),
             gamma=getattr(args, "gamma", 3.0),
-            mask_ratio_min=getattr(args, "mask_ratio_min", -0.1),
-            pretrained_model_name_or_path=getattr(args, "pretrained_model_name_or_path", ""),
-            frozen_dinov3=getattr(args, "frozen_dinov3", False),
-            num_register_tokens=getattr(args, "num_register_tokens", 0),
-            diff_cls_token=getattr(args, "diff_cls_token", False),
-            mask_ratio_type=getattr(args, "mask_ratio_type", "random"),
-            use_skip_connection=getattr(args, "use_skip_connection", False),
-            aux_model_type=getattr(args, "aux_model_type", ""),
-            aux_dec_type=getattr(args, "aux_dec_type", "transformer"),
-            aux_input_type=getattr(args, "aux_input_type", "noisy"),
-            aux_target=getattr(args, "aux_target", "reconstruction"),
-            last_layer_feature=getattr(args, "last_layer_feature", False),
-            vit_aux_model_size=getattr(args, "vit_aux_model_size", "tiny"),
-            cls_token_type=getattr(args, "cls_token_type", "none"),
-            noise_schedule=getattr(args, "noise_schedule", "uniform"),
-            disable_kl=getattr(args, "disable_kl", False),
-            use_qknorm=getattr(args, "use_qknorm", False),
-        )
-    elif args.model in models.DeAE_models:
-        model = models.DeAE_models[args.model](
-            img_size=args.img_size,
-            patch_size=args.patch_size,
-            token_channels=args.token_channels,
-            mask_ratio=args.mask_ratio,
-            random_mask_ratio=args.random_mask_ratio,
-            gamma=args.gamma,
-            use_vf=args.use_vf_loss,
         )
     else:
         raise ValueError(f"Unsupported model {args.model}")
@@ -359,7 +334,7 @@ def create_auto_guidance_model(args):
 
     checkpoint = torch.load(args.load_auto_guidance_from, weights_only=False, map_location="cpu")
     msg = model.load_state_dict(checkpoint["model_ema"], strict=False)
-    logger.info(f"Auto Guidance Model Loaded: {msg}")
+    logger.info(f"Auto Guidance Model Loaded: {msg} from {args.load_auto_guidance_from}")
 
     model.cuda()
     logger.info("====Auto Guidance Model=====")
@@ -417,9 +392,8 @@ def create_loss_module(args):
         perceptual_loss=getattr(args, "perceptual_loss", "lpips-convnext_s-1.0-0.1"),
         perceptual_weight=getattr(args, "perceptual_weight", 1.1),
         kl_weight=args.kl_loss_weight,
-        vf_weight=args.vf_loss_weight,
-        aux_loss_type=args.aux_loss_type,
-        aux_weight=args.aux_loss_weight,
+        sem_loss_type=args.sem_loss_type,
+        sem_weight=args.sem_loss_weight,
     )
     loss_module.cuda()
     logger.info("====Loss Module=====")

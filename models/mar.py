@@ -19,7 +19,7 @@ from tqdm import tqdm
 from .diffloss import DiffLoss
 from .layers import Block
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 MAR_SIZE_DICT = {
     "base": {"width": 768, "layers": 12, "heads": 12},

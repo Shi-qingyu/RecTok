@@ -30,7 +30,7 @@ torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.deterministic = False
 
-logger = logging.getLogger("DeTok-SiT")
+logger = logging.getLogger("RecTok")
 
 
 def main(args: argparse.Namespace) -> int:
@@ -200,11 +200,11 @@ def get_args_parser():
 
     # basic training parameters
     parser.add_argument("--start_epoch", default=0, type=int)
-    parser.add_argument("--epochs", default=400, type=int)
+    parser.add_argument("--epochs", default=800, type=int)
     parser.add_argument("--batch_size", default=64, type=int, help="Batch size per GPU for training")
 
     # model parameters
-    parser.add_argument("--model", default="MAR_base", type=str)
+    parser.add_argument("--model", default="DiTDDT_xl", type=str)
     parser.add_argument("--order", default="raster", type=str)
     parser.add_argument("--patch_size", default=1, type=int)
     parser.add_argument("--no_dropout_in_mlp", action="store_true")
@@ -214,16 +214,12 @@ def get_args_parser():
 
     # tokenizer parameters
     parser.add_argument("--img_size", default=256, type=int)
-    parser.add_argument("--tokenizer", default=None, type=str)
-    parser.add_argument("--pretrained_model_name_or_path", default="", type=str)
-    parser.add_argument("--freeze_encoder", action="store_true")
+    parser.add_argument("--tokenizer", default="rectok_BB", type=str)
     parser.add_argument("--token_channels", default=16, type=int)
     parser.add_argument("--tokenizer_patch_size", default=16, type=int)
     parser.add_argument("--use_ema_tokenizer", action="store_true")
-    parser.add_argument("--num_register_tokens", default=0, type=int)
-    parser.add_argument("--aux_cls_token", action="store_true")
+    parser.add_argument("--cls_token_type", default="none", type=int)
     parser.add_argument("--diff_cls_token", action="store_true")
-    parser.add_argument("--pooling_cls_token", action="store_true")
     parser.add_argument("--disable_kl", action="store_true")
 
     # tokenizer cache parameters
@@ -261,8 +257,8 @@ def get_args_parser():
     
     # auto guidance parameters
     parser.add_argument("--use_auto_guidance", action="store_true")
-    parser.add_argument("--auto_guidance_model", type=str, default="ditdh_s")
-    parser.add_argument("--load_auto_guidance_from", type=str, default="work_dirs/gen_model_training/ditddt_s-detokBB-ch128-p16-g3.0-m-0.10.7random-auxdionv3transformernoisyalign-decoderft-ppl1.0/checkpoints/epoch_0009.pth")
+    parser.add_argument("--auto_guidance_model", type=str, default="DiTDDT_s")
+    parser.add_argument("--load_auto_guidance_from", type=str, default="")
 
     # optimization parameters
     parser.add_argument("--lr", type=float, default=None)

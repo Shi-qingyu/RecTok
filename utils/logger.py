@@ -16,7 +16,7 @@ from typing_extensions import override
 
 from .distributed import get_global_rank, is_enabled, is_main_process
 
-logger = logging.getLogger("DeTok")
+logger = logging.getLogger("RecTok")
 
 
 def move_to_device(obj: Any, device: torch.device) -> Any:
