@@ -29,12 +29,6 @@ vit_sem_model_size="tiny"
 exp_name="${model}-img${img_size}-ch${token_channels}-p${patch_size}-g${gamma}${noise_schedule}-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}"
 exp_name="${exp_name}-sem${foundation_model_type}${sem_dec_type}${vit_sem_model_size}${sem_input_type}${sem_loss_weight}${sem_target}"
 
-MASTER_ADDR=${ARNOLD_WORKER_0_HOST:-127.0.0.1}
-MASTER_PORT=(${ARNOLD_WORKER_0_PORT//,/ })
-MASTER_PORT=${MASTER_PORT:-12345}
-NNODES=${ARNOLD_WORKER_NUM:-1}
-NODE_RANK=${ARNOLD_ID:-0}
-
 GPUS_PER_NODE=${GPUS_PER_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')}
 GPUS_PER_NODE=${GPUS_PER_NODE:-1}
 NPROC_PER_NODE=${NPROC_PER_NODE:-$GPUS_PER_NODE}
@@ -44,11 +38,11 @@ global_batch=$(( batch_size * NNODES * NPROC_PER_NODE ))
 echo "[INFO] per-GPU batch=${batch_size}, global batch=${global_batch}"
 
 torchrun \
-    --nnodes="${NNODES}" \
+    --nnodes="${NNODES:-1}" \
     --nproc_per_node="${NPROC_PER_NODE}" \
-    --node_rank="${NODE_RANK}" \
-    --master_addr="${MASTER_ADDR}" \
-    --master_port="${MASTER_PORT}" \
+    --node_rank="${NODE_RANK:-0}" \
+    --master_addr="${MASTER_ADDR:-127.0.0.1}" \
+    --master_port="${MASTER_PORT:-12345}" \
     main_reconstruction.py \
     --project "${project}" --exp_name "${exp_name}" --auto_resume \
     --batch_size "${batch_size}" --model "${model}" \
