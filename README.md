@@ -92,7 +92,7 @@ bash run_eval_diffusion.sh \
 
 Selected examples of class-conditional generation results on ImageNet-1K 256x256:
 <p align="center">
-  <img src="assets/qualitative_results.png" width="1080">
+  <img src="assets/qualitative.png" width="1080">
 </p>
 
 FID-50k and Inception Score without CFG and with CFG:
