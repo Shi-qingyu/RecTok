@@ -146,3 +146,5 @@ placeholder
 We thank the authors of [lDeTok](https://github.com/Jiawei-Yang/DeTok), [RAE](https://github.com/bytetriper/RAE), [MAE](https://github.com/facebookresearch/mae), [DiT](https://github.com/facebookresearch/DiT), and [LightningDiT](https://github.com/hustvl/LightningDiT) for their foundational work.
 
 Our codebase builds upon several excellent open-source projects, including [lDeTok](https://github.com/Jiawei-Yang/DeTok), [RAE](https://github.com/bytetriper/RAE), and [torch_fidelity](https://github.com/toshas/torch-fidelity). We are grateful to the communities behind them.
+
+We sincerely thank [Jiawei Yang](https://jiawei-yang.github.io/) and [Boyang Zheng](https://bytetriper.github.io/) for providing insightful feedback.
