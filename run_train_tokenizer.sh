@@ -44,39 +44,39 @@ global_batch=$(( batch_size * NNODES * NPROC_PER_NODE ))
 echo "[INFO] per-GPU batch=${batch_size}, global batch=${global_batch}"
 
 torchrun \
-  --nnodes="${NNODES}" \
-  --nproc_per_node="${NPROC_PER_NODE}" \
-  --node_rank="${NODE_RANK}" \
-  --master_addr="${MASTER_ADDR}" \
-  --master_port="${MASTER_PORT}" \
-  main_reconstruction.py \
-  --project "${project}" --exp_name "${exp_name}" --auto_resume \
-  --batch_size "${batch_size}" --model "${model}" \
-  --token_channels "${token_channels}" \
-  --img_size "${img_size}" \
-  --patch_size "${patch_size}" \
-  --foundation_model_type "${foundation_model_type}" \
-  --sem_dec_type "${sem_dec_type}" \
-  --sem_input_type "${sem_input_type}" \
-  --sem_target "${sem_target}" \
-  --sem_loss_type "${sem_loss_type}" \
-  --gamma "${gamma}" \
-  --noise_schedule "${noise_schedule}" \
-  --mask_ratio "${mask_ratio}" \
-  --mask_ratio_min "${mask_ratio_min}" \
-  --mask_ratio_type "${mask_ratio_type}" \
-  --vit_sem_model_size "${vit_sem_model_size}" \
-  --reconstruction_weight "${reconstruction_weight}" \
-  --perceptual_weight "${perceptual_weight}" \
-  --discriminator_weight "${discriminator_weight}" \
-  --kl_loss_weight "${kl_loss_weight}" \
-  --sem_loss_weight "${sem_loss_weight}" \
-  --online_eval \
-  --eval_freq 10 \
-  --fid_stats_path "data/fid_stats/val_fid_statistics_file_256.npz" \
-  --milestone_interval 100 \
-  --epochs "${epochs}" \
-  --discriminator_start_epoch "${discriminator_start_epoch}" \
-  --data_path "${data_path}" \
-  --enable_wandb \
-  --entity "qingyushi"
+    --nnodes="${NNODES}" \
+    --nproc_per_node="${NPROC_PER_NODE}" \
+    --node_rank="${NODE_RANK}" \
+    --master_addr="${MASTER_ADDR}" \
+    --master_port="${MASTER_PORT}" \
+    main_reconstruction.py \
+    --project "${project}" --exp_name "${exp_name}" --auto_resume \
+    --batch_size "${batch_size}" --model "${model}" \
+    --token_channels "${token_channels}" \
+    --img_size "${img_size}" \
+    --patch_size "${patch_size}" \
+    --foundation_model_type "${foundation_model_type}" \
+    --sem_dec_type "${sem_dec_type}" \
+    --sem_input_type "${sem_input_type}" \
+    --sem_target "${sem_target}" \
+    --sem_loss_type "${sem_loss_type}" \
+    --gamma "${gamma}" \
+    --noise_schedule "${noise_schedule}" \
+    --mask_ratio "${mask_ratio}" \
+    --mask_ratio_min "${mask_ratio_min}" \
+    --mask_ratio_type "${mask_ratio_type}" \
+    --vit_sem_model_size "${vit_sem_model_size}" \
+    --reconstruction_weight "${reconstruction_weight}" \
+    --perceptual_weight "${perceptual_weight}" \
+    --discriminator_weight "${discriminator_weight}" \
+    --kl_loss_weight "${kl_loss_weight}" \
+    --sem_loss_weight "${sem_loss_weight}" \
+    --online_eval \
+    --eval_freq 10 \
+    --fid_stats_path "data/fid_stats/val_fid_statistics_file_${img_size}.npz" \
+    --milestone_interval 100 \
+    --epochs "${epochs}" \
+    --discriminator_start_epoch "${discriminator_start_epoch}" \
+    --data_path "${data_path}" \
+    --enable_wandb \
+    --entity "YOUR_WANDB_ENTITY"

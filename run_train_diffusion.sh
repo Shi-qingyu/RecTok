@@ -47,4 +47,6 @@ torchrun \
     --cfg_list 1.0 \
     --online_eval --eval_freq 10 \
     --vis_freq 50 --eval_bsz 256 \
-    --data_path ./data/imagenet/train
+    --data_path ./data/imagenet/train \
+    --enable_wandb \
+    --entity "YOUR_WANDB_ENTITY"

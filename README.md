@@ -9,6 +9,10 @@
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://shi-qingyu.github.io/rectok.github.io/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg?style=flat-square)](LICENSE)
 
+<p align="center">
+  <img src="assets/pipeline.png" width="720">
+</p>
+
 </div>
 
 ---
@@ -42,6 +46,14 @@ mv ./pretrained_models/data ./data
 mv ./pretrained_models/offline_models.zip ./offline_models.zip
 unzip offline_models.zip && rm offline_models.zip
 ```
+| Model               | Type      | Params | Hugging Face |
+|---------------------|-----------|-------|-------------|
+| RecTok            | Tokenizer | 172M  | [🤗 rectok](https://huggingface.co/QingyuShi/RecTok/blob/main/RecTok.pth) |
+| RecTok-decft | Tokenizer | 172M  | [🤗 rectok-decft](https://huggingface.co/QingyuShi/RecTok/blob/main/RecTok_decft.pth) |
+| $\text{DiT}^{\text{DH}}\text{-XL}$-80e            | Generator | 839M  | [🤗 ditdh-xl-80e](https://huggingface.co/QingyuShi/RecTok/blob/main/ditdhxl_epoch_0079.pth) |
+| $\text{DiT}^{\text{DH}}\text{-XL}$-600e           | Generator | 839M  | [🤗 ditdh-xl-600e](https://huggingface.co/QingyuShi/RecTok/blob/main/ditdhxl_epoch_0599.pth) |
+| For Auto Guidance Only  | | | |
+| $\text{DiT}^{\text{DH}}\text{-S}$-30e           | Generator | 193M  | [🤗 ditdh-s-30e](https://huggingface.co/QingyuShi/RecTok/blob/main/ditdhs_epoch_0029.pth) |
 
 ### 3. Download ImageNet-1K
 Please download ImageNet-1K to `./data`. Your directory structure should look like this:
@@ -67,22 +79,38 @@ data/
 ### Tokenizer Evaluation
 Evaluate the reconstruction performance of the tokenizer:
 ```bash
-bash run_eval_tokenizer.sh pretrained_models/RecTok_decft.pth
+bash run_eval_tokenizer.sh pretrained_models/RecTok_decft.pth   # path to RecTok checkpoint
 ```
 ### Generative Model Evaluation
-Evaluate the generation quality (FID, etc.):
+Evaluate the generation quality (FID, etc.), you can find the evaluation results in dir `./work_dirs/gen_model_training/RecTok_eval`:
 ```bash
 bash run_eval_diffusion.sh \
-    pretrained_models/RecTok_decft.pth \
-    pretrained_models/ditdhxl_epoch_0599.pth \
-    pretrained_models/ditdhs_epoch_0029.pth
+    pretrained_models/RecTok_decft.pth \        # path to RecTok checkpoint
+    pretrained_models/ditdhxl_epoch_0599.pth \  # path to DiTDH-XL checkpoint
+    pretrained_models/ditdhs_epoch_0029.pth     # path to autoguidance model checkpoint
 ```
+
+Selected examples of class-conditional generation results on ImageNet-1K 256x256:
+<p align="center">
+  <img src="assets/qualitative_results.png" width="1080">
+</p>
+
+FID-50k and Inception Score without CFG and with CFG:
+|cfg| MAR Model                    | Epochs | FID-50K | Inception Score | #params | 
+|---|------------------------------|---------|---------|-----------------|---------|
+|1.0| $\text{DiT}^{\text{DH}}\text{-XL}$ + RecTok      | 80      | 2.09    | 198.6           | 839M    |
+|1.29| $\text{DiT}^{\text{DH}}\text{-XL}$ + RecTok | 80      | 1.48    | 223.8           | 839M    |
+|1.0| $\text{DiT}^{\text{DH}}\text{-XL}$ + RecTok      | 600      | 1.34    | 254.6           | 839M    |
+|1.29| $\text{DiT}^{\text{DH}}\text{-XL}$ + RecTok | 600      | 1.13    | 289.2           | 839M    |
 ---
 
 ## 🚀 Training
 
 ### 1. Tokenizer Training
 **Stage 1: Train RecTok Tokenizer**
+
+Please modify the --entity "YOUR_WANDB_ENTITY" if you want to use wandb. 
+Otherwise please remenber to remove the --enable_wandb.
 ```bash
 bash run_train_tokenizer.sh
 ```
