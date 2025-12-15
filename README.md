@@ -91,7 +91,7 @@ Run the following command for decoder fine-tuning:
 ```bash
 bash run_decoder_finetune_tokenizer.sh <exp_name in Stage 1 run_train_tokenizer.sh>
 ```
-### 3. Generative Model Training
+### 2. Generative Model Training
 **Option A: Train from Scratch:**
 Train the diffusion transformer model ($\text{DiT}^{\text{DH}}\text{-XL}$):
 ```bash
