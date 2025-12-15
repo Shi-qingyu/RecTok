@@ -26,7 +26,6 @@ import utils.distributed as dist
 import utils.misc as misc
 from utils.logger import MetricLogger, SmoothedValue, setup_logging, setup_wandb, WandbLogger
 from utils.losses import ReconstructionLoss
-from utils.builders import create_auto_guidance_model
 
 tqdm = partial(tqdm, dynamic_ncols=True)
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -70,7 +69,7 @@ def setup(args: argparse.Namespace):
                 log_dir=args.log_dir,
             )
 
-        setup_logging(output=args.log_dir, name="DeTok", rank0_log_only=True)
+        setup_logging(output=args.log_dir, name="RecTok", rank0_log_only=True)
         logger.info(f"Logging to {args.log_dir}")
         json_config = json.dumps(args.__dict__, indent=4, sort_keys=True)
         logger.info(json_config)
@@ -844,7 +843,10 @@ def evaluate_tokenizer(
 
         for i, sample_np in enumerate(reconstructed_uint8):
             global_index = img_ids[i].item()
-            Image.fromarray(sample_np).save(f"{eval_dir}/{global_index:06d}.png")
+            image = Image.fromarray(sample_np)
+            if image.size != (256, 256):
+                image = image.resize((256, 256), resample=Image.LANCZOS)
+            image.save(f"{eval_dir}/{global_index:06d}.png")
             
         # save gt
         if save_gt:

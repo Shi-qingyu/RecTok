@@ -45,6 +45,32 @@ def apply_rotary_emb(x: Tensor, freqs_cis: Tensor) -> Tensor:
     return x * freqs_cos + rotate_half(x) * freqs_sin
 
 
+def interpolate_pos_embed_2d(pos_embed, new_seq_len):
+    """
+    Interpolate position embeddings to a new sequence length using bicubic interpolation.
+    """
+    N, seq_len, dim = pos_embed.shape
+    if seq_len == new_seq_len:
+        return pos_embed
+    
+    size = int(sqrt(seq_len))
+    
+    assert size * size == seq_len, "Original sequence length is not a perfect square."
+
+    new_size = int(sqrt(new_seq_len))
+    logger.info(f"Resizing position embedding from {size}x{size} to {new_size}x{new_size}")
+
+    pos_embed = pos_embed.permute(0, 2, 1).view(1, dim, size, size)
+    new_pos_embed = F.interpolate(
+        pos_embed, 
+        size=(new_size, new_size), 
+        mode='bicubic', 
+        align_corners=False
+    )
+    new_pos_embed = new_pos_embed.flatten(2).permute(0, 2, 1)
+    return new_pos_embed
+
+
 def get_rope_tensor(
     dim: int,
     seq_h: int,
@@ -324,7 +350,7 @@ class Encoder(nn.Module):
         if self.cls_token_type == "learnable":
             x = torch.cat([self.sem_cls_token_embedding.expand(x.shape[0], -1, -1), x], dim=1)
             
-        x = x + self.position_embedding
+        x = x + self.positional_embedding
             
         x, _, ids_restore, rope, ids_keep, ids_masked = self.mae_random_masking(x)
         
@@ -497,7 +523,7 @@ class Decoder(nn.Module):
             expanded_ids_restore = ids_restore.unsqueeze(-1).expand(-1, -1, z_.shape[-1])
             z = torch.gather(z_, dim=1, index=expanded_ids_restore)
             
-        z = z + self.position_embedding
+        z = z + self.positional_embedding
 
         z = self.ln_pre(z)
         rope = self.rope_tensor.expand(bsz, -1, -1)
@@ -918,7 +944,6 @@ class RecTok(nn.Module):
         sem_input = ret["sem_input"]    # for sem decoder
         posteriors = ret["posteriors"]
         ids_restore = ret["ids_restore"]
-        ids_keep = ret["ids_keep"]
         ids_masked = ret["ids_masked"]
 
         if self.use_sem and self.training:

@@ -13,6 +13,7 @@ import torch.nn.utils
 from torch import inf
 
 import utils.distributed as dist
+from models.rectok import interpolate_pos_embed_2d
 
 logger = logging.getLogger("RecTok")
 
@@ -200,20 +201,30 @@ def ckpt_resume(
             checkpoint = torch.load(args.load_from, map_location="cpu", weights_only=False)
             # load the model state dict if it exists
             state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint
-            if getattr(args, "freeze_encoder", False):
-                unpaired_keys = ["encoder.latent_head", "decoder.decoder_embed", "aux_decoders.dinov2.token_embedding"]
-                state_dict = {k: v for k, v in state_dict.items() if not any(k.startswith(key) for key in unpaired_keys)}
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                new_key = k.replace("aux", "sem") if "aux" in k else k
+                if "positional_embedding" in new_key and v.ndim == 3:
+                    new_value = interpolate_pos_embed_2d(v, model.seq_h * model.seq_w)
+                else:
+                    new_value = v
+                new_state_dict[new_key] = new_value
+            state_dict = new_state_dict
+                
             msg = model.load_state_dict(state_dict, strict=False)
-            # assert unexpected keys can only start with "loss."
-            # for key in msg.unexpected_keys:
-            #     assert key.startswith("loss."), f"unexpected key {key} doesn't start with 'loss.'"
             logger.info(f"[Model-load] Loaded model: {msg}")
             if "model_ema" in checkpoint:
                 logger.info(f"[Model-load] Loaded EMA")
                 ema_state_dict = checkpoint["model_ema"]
-                if getattr(args, "freeze_encoder", False):
-                    unpaired_keys = ["encoder.latent_head", "decoder.decoder_embed", "aux_decoders.dinov2.token_embedding"]
-                    ema_state_dict = {k: v for k, v in ema_state_dict.items() if not any(k.startswith(key) for key in unpaired_keys)}
+                new_ema_state_dict = {}
+                for k, v in ema_state_dict.items():
+                    new_key = k.replace("aux", "sem") if "aux" in k else k
+                    if "positional_embedding" in new_key and v.ndim == 3:
+                        new_value = interpolate_pos_embed_2d(v, model.seq_h * model.seq_w)
+                    else:
+                        new_value = v
+                    new_ema_state_dict[new_key] = new_value
+                ema_state_dict = new_ema_state_dict
             else:
                 logger.info(f"[Model-load] Loaded EMA with model state dict")
                 ema_state_dict = copy.deepcopy(model.state_dict())

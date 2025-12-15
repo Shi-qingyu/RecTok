@@ -114,7 +114,7 @@ def main(args: argparse.Namespace) -> int:
             torch.distributed.barrier()
 
         # periodic visualization
-        if (epoch + 1) % args.vis_freq == 0 and not args.sem_decoder_only:
+        if (epoch + 1) % args.vis_freq == 0:
             visualize_tokenizer(args, model_wo_ddp, ema_model, next(vis_iterator), epoch)
 
         # online evaluation
@@ -129,9 +129,9 @@ def main(args: argparse.Namespace) -> int:
     total_time = int(time.time() - start_time + args.last_elapsed_time)
     logger.info(f"Training time {str(datetime.timedelta(seconds=total_time))}")
 
-    if args.evaluate_when_finish:
-        for use_ema in [False, True]:
-            evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
+
+    for use_ema in [False, True]:
+        evaluate_tokenizer(args, model_wo_ddp, ema_model, data_loader_val, args.epochs, wandb_logger, use_ema)
 
     return 0
 
@@ -233,7 +233,7 @@ def get_args_parser():
     parser.add_argument("--seed", default=1, type=int)
 
     # wandb parameters
-    parser.add_argument("--project", default="lDeTok", type=str)
+    parser.add_argument("--project", default="RecTok", type=str)
     parser.add_argument("--entity", default="YOUR_WANDB_ENTITY", type=str)
     parser.add_argument("--exp_name", default=None, type=str)
     parser.add_argument("--enable_wandb", action="store_true")

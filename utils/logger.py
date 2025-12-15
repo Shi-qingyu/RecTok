@@ -267,7 +267,7 @@ class WandbLogger:
             logger.error(f"wandb failed to finish: {e}")
 
 
-def setup_logging(output: str, name: str = "DeTok", rank0_log_only: bool = True) -> None:
+def setup_logging(output: str, name: str = "RecTok", rank0_log_only: bool = True) -> None:
     """setup logging."""
     logging.captureWarnings(True)
 
