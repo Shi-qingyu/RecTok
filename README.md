@@ -89,15 +89,16 @@ bash run_train_tokenizer.sh
 **Stage 2: Decoder Fine-tuning**
 Run the following command for decoder fine-tuning:
 ```bash
-bash run_decoder_finetune_tokenizer.sh <exp_name in Stage 1's run_train_tokenizer.sh>
+bash run_decoder_finetune_tokenizer.sh <exp_name in Stage 1 run_train_tokenizer.sh>
 ```
 ### 3. Generative Model Training
+**Option A: Train from Scratch:**
 Train the diffusion transformer model ($\text{DiT}^{\text{DH}}\text{-XL}$):
 ```bash
-bash run_train_diffusion.sh <exp_name in Stage 2's run_decoder_finetune_tokenizer.sh>
+bash run_train_diffusion.sh <exp_name in Stage 2 run_decoder_finetune_tokenizer.sh>
 ```
 
-Option B: Train with Pretrained RecTok
+**Option B: Train with Pretrained RecTok:**
 To train DiT based on our official pretrained RecTok weights:
 ```bash
 mkdir -p work_dirs/tokenizer_training/rectok/checkpoints
