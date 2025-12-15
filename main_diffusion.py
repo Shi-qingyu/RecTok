@@ -56,7 +56,7 @@ def main(args: argparse.Namespace) -> int:
             return_path=True, drop_last=False
         )
         # (B, C, H, W) for chan_dim=1 or (B, seq_len, C) for chan_dim=2
-        chan_dim = 2 if (args.tokenizer in models.DeTok_models or args.tokenizer in models.DeAE_models) else 1
+        chan_dim = 2 if (args.tokenizer in models.RecTok_models or args.tokenizer in models.DeTok_models or args.tokenizer in models.DeAE_models) else 1
         
         # collect stats
         result_dict = collect_tokenizer_stats(
@@ -75,8 +75,6 @@ def main(args: argparse.Namespace) -> int:
         tokenizer.reset_stats(mean, std)
         
         del tmp_data_loader
-    data_dict = next(iter(data_loader_train))
-    visualize_tokenizer(args, tokenizer, ema_model=None, data_dict=data_dict)
 
     # setup distributed training
     if distributed.is_enabled():
@@ -218,7 +216,7 @@ def get_args_parser():
     parser.add_argument("--token_channels", default=16, type=int)
     parser.add_argument("--tokenizer_patch_size", default=16, type=int)
     parser.add_argument("--use_ema_tokenizer", action="store_true")
-    parser.add_argument("--cls_token_type", default="none", type=int)
+    parser.add_argument("--cls_token_type", default="none", type=str)
     parser.add_argument("--diff_cls_token", action="store_true")
     parser.add_argument("--disable_kl", action="store_true")
 

@@ -199,7 +199,7 @@ def get_args_parser():
     # evaluation parameters
     parser.add_argument("--num_images", default=50000, type=int, help="Number of images to evaluate on")
     parser.add_argument("--online_eval", action="store_true")
-    parser.add_argument("--fid_stats_path", type=str, default="data/fid_stats/val_fid_statistics_file.npz")
+    parser.add_argument("--fid_stats_path", type=str, default="data/fid_stats/val_fid_statistics_file_256.npz")
     parser.add_argument("--keep_eval_folder", action="store_true")
     parser.add_argument("--evaluate", action="store_true")
     parser.add_argument("--eval_bsz", type=int, default=256)

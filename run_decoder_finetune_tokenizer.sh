@@ -1,33 +1,30 @@
 project=tokenizer_training
-batch_size=64
+batch_size=64 # per-GPU batch size, global batch = batch_size * num_gpus * num_nodes = 1024
 data_path=./data/imagenet/train
 
 model=rectok_BB
 token_channels=128
 img_size=256
 patch_size=16
-foundation_model_type="dinov3"
-sem_dec_type="transformer"
-sem_input_type="noisy"
-sem_target="rec+align"
-sem_loss_type="cosine"
+foundation_model_type=""
 reconstruction_weight=1.0
 perceptual_weight=1.0
 discriminator_weight=0.5
-kl_loss_weight=1e-6
-sem_loss_weight=1.0
+kl_loss_weight=0.0
+sem_loss_weight=0.0
 
-epochs=200
-discriminator_start_epoch=100
-gamma=1.0
+epochs=100
+discriminator_start_epoch=0
+gamma=0.0
 noise_schedule="shift"  # lognorm, shift, uniform
-mask_ratio=0.4
-mask_ratio_min=-0.1
-mask_ratio_type="random"
-vit_sem_model_size="tiny"
+mask_ratio=0.0
+mask_ratio_min=0.0
+mask_ratio_type="fix"
 
-exp_name="${model}-img${img_size}-ch${token_channels}-p${patch_size}-g${gamma}${noise_schedule}-m${mask_ratio_min}${mask_ratio}${mask_ratio_type}"
-exp_name="${exp_name}-sem${foundation_model_type}${sem_dec_type}${vit_sem_model_size}${sem_input_type}${sem_loss_weight}${sem_target}"
+exp_name="${1}"
+load_from="work_dirs/tokenizer_training/$exp_name/checkpoints/epoch_0199.pth"
+
+exp_name="${exp_name}-finetune_decoder"
 
 MASTER_ADDR=${ARNOLD_WORKER_0_HOST:-127.0.0.1}
 MASTER_PORT=(${ARNOLD_WORKER_0_PORT//,/ })
@@ -51,21 +48,19 @@ torchrun \
   --master_port="${MASTER_PORT}" \
   main_reconstruction.py \
   --project "${project}" --exp_name "${exp_name}" --auto_resume \
+  --blr 5e-5 --warmup_rate 0.05 \
+  --train_decoder_only \
+  --load_from $load_from \
   --batch_size "${batch_size}" --model "${model}" \
   --token_channels "${token_channels}" \
   --img_size "${img_size}" \
   --patch_size "${patch_size}" \
   --foundation_model_type "${foundation_model_type}" \
-  --sem_dec_type "${sem_dec_type}" \
-  --sem_input_type "${sem_input_type}" \
-  --sem_target "${sem_target}" \
-  --sem_loss_type "${sem_loss_type}" \
   --gamma "${gamma}" \
   --noise_schedule "${noise_schedule}" \
   --mask_ratio "${mask_ratio}" \
   --mask_ratio_min "${mask_ratio_min}" \
   --mask_ratio_type "${mask_ratio_type}" \
-  --vit_sem_model_size "${vit_sem_model_size}" \
   --reconstruction_weight "${reconstruction_weight}" \
   --perceptual_weight "${perceptual_weight}" \
   --discriminator_weight "${discriminator_weight}" \

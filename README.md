@@ -1,147 +1,119 @@
-## Preparation
+<div align="center">
 
-### Upload
+# RecTok: Reconstruction Distillation along Rectified Flow
 
-Compress only .pth, .txt, and .json files in a folder into a zip file and then uploading.
+**Official PyTorch Implementation**
+
+[![arXiv](https://img.shields.io/badge/arXiv-RecTok-b31b1b.svg?style=flat-square)]()
+[![HuggingFace Model](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow?style=flat-square)](https://huggingface.co/QingyuShi/RecTok)
+[![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://shi-qingyu.github.io/rectok.github.io/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-green.svg?style=flat-square)](LICENSE)
+
+</div>
+
+---
+
+## 🛠️ Preparation
+
+### 1. Installation
+
+Set up the environment and install dependencies:
+
 ```bash
-python upload_to_huggingface.py --base_dir work_dirs/tokenizer_training
-```
+# Clone the repository
+git clone https://github.com/Shi-qingyu/RecTok.git
+cd RecTok
 
-### Installation
+# Create and activate conda environment
+conda create -n rectok python=3.10 -y
+conda activate rectok
 
-Create and activate conda environment:
-```bash
-conda create -n detok python=3.10 -y && conda activate detok
+# Install requirements
 pip install -r requirements.txt
 ```
 
-### Dataset
-Download ImageNet1K through:
+### 2. Download Models
+Download pretrained models and necessary data assets:
 ```bash
-bash prepare_data.sh
+# Download from HuggingFace
+huggingface-cli download QingyuShi/RecTok --local-dir ./pretrained_models
+# Organize data assets and offline models
+mv ./pretrained_models/data ./data
+mv ./pretrained_models/offline_models.zip ./offline_models.zip
+unzip offline_models.zip && rm offline_models.zip
 ```
 
-### DINOv3
-```bash
-hf download QingyuShi/SemanticTok offline_models.zip --local-dir ./
-unzip offline_models.zip
-```
-
-### Data Organization
-
-Your data directory should be organized as follows:
-```
+### 3. Download ImageNet-1K
+Please download ImageNet-1K to `./data`. Your directory structure should look like this:
+```text
 data/
-├── fid_stats/          # FID statistics
-│   ├── adm_in256_stats.npz
-│   └── val_fid_statistics_file.npz
-├── imagenet/           # ImageNet dataset (or symlink)
+├── fid_stats/                          # FID statistics files
+│   ├── adm_in256_stats.npz             # For gFID
+│   ├── val_fid_statistics_file_256.npz # For rFID
+│   └── val_fid_statistics_file_512.npz # For rFID
+├── imagenet/                           # ImageNet dataset
 │   ├── train/
-│   │   ├──n01440764
-│   │   └──n01443537
+│   │   ├── n01440764/
+│   │   └── ...
 │   └── val/
-│       ├──n01440764
-│       └──n01443537
-├── imagenet-val-prc/   # Precision-recall data
-├── train.txt           # Training file list
-└── val.txt             # Validation file list
+│       ├── n01440764/
+│       └── ...
+├── train.txt                           # Training file list
+└── val.txt                             # Validation file list
 ```
 
-## Training
+---
+## 📊 Evaluation
+### Tokenizer Evaluation
+Evaluate the reconstruction performance of the tokenizer:
+```bash
+bash run_eval_tokenizer.sh pretrained_models/RecTok_decft.pth
+```
+### Generative Model Evaluation
+Evaluate the generation quality (FID, etc.):
+```bash
+bash run_eval_diffusion.sh \
+    pretrained_models/RecTok_decft.pth \
+    pretrained_models/ditdhxl_epoch_0599.pth \
+    pretrained_models/ditdhs_epoch_0029.pth
+```
+---
+
+## 🚀 Training
 
 ### 1. Tokenizer Training
-
-Train DeTok tokenizer with denoising:
+**Stage 1: Train RecTok Tokenizer**
 ```bash
-project=tokenizer_training
-exp_name=detokBB-tokch-16-g3.0-m0.0-aux1.0-200ep
-batch_size=64  # global batch size = batch_size x num_nodes x 8 = 1024
-num_nodes=2    # adjust for your multi-node setup
-
-torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
-    main_reconstruction.py \
-    --project $project --exp_name $exp_name --auto_resume \
-    --batch_size $batch_size \
-    --model detok_BB --token_channels 16 \
-    --gamma 3.0 --mask_ratio 0.0 \
-    --use_aux_decoder --aux_loss_weight 1.0 \
-    --online_eval \
-    --epochs 200 --discriminator_start_epoch 100 \
-    --data_path ./data/imagenet/train
+bash run_train_tokenizer.sh
+```
+**Stage 2: Decoder Fine-tuning**
+Run the following command for decoder fine-tuning:
+```bash
+bash run_decoder_finetune_tokenizer.sh <exp_name in Stage 1's run_train_tokenizer.sh>
+```
+### 3. Generative Model Training
+Train the diffusion transformer model ($\text{DiT}^{\text{DH}}\text{-XL}$):
+```bash
+bash run_train_diffusion.sh <exp_name in Stage 2's run_decoder_finetune_tokenizer.sh>
 ```
 
-Decoder fine-tuning:
+Option B: Train with Pretrained RecTok
+To train DiT based on our official pretrained RecTok weights:
 ```bash
-project=tokenizer_training
-exp_name=detokBB-g3.0-m0.7-200ep-decoder_ft-100ep
-batch_size=64
-num_nodes=2
-pretrained_tok=work_dirs/tokenizer_training/detokBB-g3.0-m0.7-200ep/checkpoints/latest.pth
-
-torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
-    main_reconstruction.py \
-    --project $project --exp_name $exp_name --auto_resume \
-    --batch_size $batch_size --model detok_BB \
-    --load_from $pretrained_tok \
-    --online_eval --train_decoder_only \
-    --perceptual_weight 0.1 \
-    --gamma 0.0 --mask_ratio 0.0 \
-    --blr 5e-5 --warmup_rate 0.05 \
-    --epochs 100 --discriminator_start_epoch 0 \
-    --data_path ./data/imagenet/train
+mkdir -p work_dirs/tokenizer_training/rectok/checkpoints
+cp pretrained_models/RecTok_decft.pth work_dirs/tokenizer_training/rectok/checkpoints/latest.pth
+bash run_train_diffusion.sh rectok
 ```
 
-Latent head fine-tuning:
-```bash
-project=tokenizer_training
-exp_name=detokBB-ch32-g3.0-m-0.10.7random-auxdinov2transformeralign-head_ft
-batch_size=128
-num_nodes=1
-pretrained_tok=work_dirs/tokenizer_training/detokBB-ch32-g3.0-m-0.10.7random-auxdinov2transformeralign/checkpoints/epoch_0199.pth
-
-torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
-    main_reconstruction.py \
-    --project $project --exp_name $exp_name --auto_resume \
-    --batch_size $batch_size --model detok_BB \
-    --load_from $pretrained_tok \
-    --online_eval --train_latent_head_only \
-    --perceptual_weight 0.1 \
-    --gamma 0.0 --mask_ratio 0.0 \
-    --blr 5e-5 --warmup_rate 0.05 \
-    --epochs 100 --discriminator_start_epoch 0 \
-    --data_path ./data/imagenet/train
+---
+## 📜 Citation
+If you find this work useful for your research, please consider citing:
+```bibtex
+placeholder
 ```
 
-### 2. Generative Model Training
+---
+## 🙏 Acknowledgements
+We thank the authors of [lDeTok](https://github.com/Jiawei-Yang/DeTok), [RAE](https://github.com/bytetriper/RAE), [MAE](https://github.com/facebookresearch/mae), [DiT](https://github.com/facebookresearch/DiT), and [LightningDiT](https://github.com/hustvl/LightningDiT) for their foundational work.
 
-Train SiT-base (100 epochs):
-```bash
-tokenizer_project=tokenizer_training
-tokenizer_exp_name=detokBB-tokch-16-g3.0-m0.0-aux1.0-200ep  # should be same as exp_name in the tokenizer training script
-project=gen_model_training
-exp_name=sit_base-${tokenizer_exp_name}
-batch_size=64
-num_nodes=2
-epochs=100
-
-torchrun --nproc_per_node=8 --nnodes=$num_nodes --node_rank=${NODE_RANK} --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
-    main_diffusion.py \
-    --project $project --exp_name $exp_name --auto_resume \
-    --batch_size $batch_size --epochs $epochs --use_aligned_schedule \
-    --tokenizer detok_BB --token_channels 16 \
-    --use_ema_tokenizer --collect_tokenizer_stats \
-    --stats_key $tokenizer_exp_name --stats_cache_path work_dirs/stats.pkl --overwrite_stats \
-    --load_tokenizer_from work_dirs/$tokenizer_project/$tokenizer_exp_name/checkpoints/latest.pth \
-    --model SiT_base \
-    --num_sampling_steps 250 --cfg 1.6 \
-    --cfg_list 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 \
-    --vis_freq 50 --eval_bsz 256 \
-    --data_path ./data/imagenet/train
-```
-
-### 3. Evaluation
-
-```bash
-bash run_eval_diffusion.sh detokBB-img512-ch128-p16-g1.0shift-m-0.10.3random-auxdinov3transformertinynoisyalign-11-29
-bash run_eval_diffusion.sh detokBB-img512-ch128-p16-g1.0shift-m-0.10.4random-auxdinov3transformertinynoisyalign-11-29
-```
+Our codebase builds upon several excellent open-source projects, including [lDeTok](https://github.com/Jiawei-Yang/DeTok), [RAE](https://github.com/bytetriper/RAE), and [torch_fidelity](https://github.com/toshas/torch-fidelity). We are grateful to the communities behind them.

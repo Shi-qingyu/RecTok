@@ -1,14 +1,12 @@
 project=tokenizer_training
-batch_size=64
 data_path=./data/imagenet/train
-model=detok_BB
-img_size=512
+model=rectok_BB
+img_size=256
 token_channels=128
 patch_size=16
-pretrained_model_name_or_path=""
-num_register_tokens=0
-exp_name="$1"
-load_from="work_dirs/tokenizer_training/${exp_name}/checkpoints/epoch_0199.pth"
+exp_name="RecTok_eval"
+
+load_from="$1"
 
 MASTER_ADDR=${ARNOLD_WORKER_0_HOST:-127.0.0.1}
 MASTER_PORT=(${ARNOLD_WORKER_0_PORT//,/ })
@@ -21,8 +19,6 @@ GPUS_PER_NODE=${GPUS_PER_NODE:-1}
 NPROC_PER_NODE=${NPROC_PER_NODE:-$GPUS_PER_NODE}
 
 echo "[INFO] nnodes=${NNODES}, node_rank=${NODE_RANK}, nproc_per_node=${NPROC_PER_NODE}, master=${MASTER_ADDR}:${MASTER_PORT}"
-global_batch=$(( batch_size * NNODES * NPROC_PER_NODE ))
-echo "[INFO] per-GPU batch=${batch_size}, global batch=${global_batch}"
 
 torchrun \
     --nnodes="${NNODES}" \
@@ -32,12 +28,10 @@ torchrun \
     --master_port="${MASTER_PORT}" \
     main_reconstruction.py \
     --project "${project}" --exp_name "${exp_name}" \
-    --batch_size "${batch_size}" --model "${model}" \
+    --model "${model}" \
     --token_channels "${token_channels}" \
     --img_size "${img_size}" \
     --patch_size "${patch_size}" \
-    --pretrained_model_name_or_path "${pretrained_model_name_or_path}" \
-    --num_register_tokens "${num_register_tokens}" \
     --load_from "${load_from}" \
     --evaluate \
     --eval_bsz 256 \
