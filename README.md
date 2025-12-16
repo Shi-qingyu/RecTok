@@ -4,7 +4,7 @@
 
 **Official PyTorch Implementation**
 
-[![arXiv](https://img.shields.io/badge/arXiv-RecTok-b31b1b.svg?style=flat-square)]()
+[![arXiv](https://img.shields.io/badge/arXiv-RecTok-b31b1b.svg?style=flat-square)](https://arxiv.org/abs/2512.13421)
 [![HuggingFace Model](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow?style=flat-square)](https://huggingface.co/QingyuShi/RecTok)
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?style=flat-square)](https://shi-qingyu.github.io/rectok.github.io/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg?style=flat-square)](LICENSE)
