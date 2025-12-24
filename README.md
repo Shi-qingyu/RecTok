@@ -138,7 +138,12 @@ bash run_train_diffusion.sh rectok
 ## 📜 Citation
 If you find this work useful for your research, please consider citing:
 ```bibtex
-placeholder
+@article{rectok,
+  title={RecTok: Reconstruction Distillation along Rectified Flow},
+  author={Shi, Qingyu and Wu, Size and Bai, Jinbin and Yu, Kaidong and Wang, Yujing and Tong, Yunhai and Li, Xiangtai and Li, Xuelong},
+  journal={arXiv preprint arXiv:2512.13421},
+  year={2025}
+}
 ```
 
 ---
