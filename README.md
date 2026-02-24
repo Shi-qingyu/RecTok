@@ -1,6 +1,6 @@
 <div align="center">
 
-# RecTok: Reconstruction Distillation along Rectified Flow
+# RecTok: Reconstruction Distillation along Rectified Flow [CVPR 2026]
 
 **Official PyTorch Implementation**
 
